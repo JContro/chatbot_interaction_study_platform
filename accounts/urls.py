@@ -9,4 +9,10 @@ urlpatterns = [
     path('chat/', views.chat_view, name='chat'),
     path('verify-email/<uuid:token>/',
          views.verify_email_view, name='verify_email'),
+    path('password-reset/request/', views.password_reset_request_view,
+         name='password_reset_request'),
+    path('password-reset/done/', views.password_reset_done_view,
+         name='password_reset_done'),
+    path('password-reset/<uuid:token>/',
+         views.password_reset_confirm_view, name='password_reset_confirm'),
 ]

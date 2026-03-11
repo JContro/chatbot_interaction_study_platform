@@ -3,9 +3,9 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
-from .forms import CustomUserCreationForm, CustomAuthenticationForm
+from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
 from .models import User
-from .utils import send_verification_email, verify_email
+from .utils import send_verification_email, verify_email, send_password_reset_email
 
 
 def home_view(request):
@@ -108,6 +108,79 @@ def logout_view(request):
     logout(request)
     messages.info(request, 'You have been logged out.')
     return redirect('login')
+
+
+def password_reset_request_view(request):
+    """
+    Handle password reset request - show form to enter email.
+    """
+    if request.user.is_authenticated:
+        return redirect('chat')
+
+    if request.method == 'POST':
+        form = PasswordResetRequestForm(request.POST)
+        if form.is_valid():
+            email = form.cleaned_data.get('email')
+            try:
+                user = User.objects.get(email=email)
+                send_password_reset_email(user, request)
+                messages.success(
+                    request, 'If an account with that email exists, we have sent password reset instructions.')
+            except User.DoesNotExist:
+                # Don't reveal whether email exists or not
+                messages.success(
+                    request, 'If an account with that email exists, we have sent password reset instructions.')
+            return redirect('password_reset_done')
+    else:
+        form = PasswordResetRequestForm()
+
+    return render(request, 'accounts/password_reset_request.html', {'form': form})
+
+
+def password_reset_done_view(request):
+    """
+    Show confirmation that password reset email was sent.
+    """
+    if request.user.is_authenticated:
+        return redirect('chat')
+    return render(request, 'accounts/password_reset_done.html')
+
+
+def password_reset_confirm_view(request, token):
+    """
+    Handle password reset confirmation - show form to set new password.
+    """
+    if request.user.is_authenticated:
+        return redirect('chat')
+
+    user = get_object_or_404(User, password_reset_token=token)
+
+    # Check if token is expired (24 hours)
+    if user.password_reset_sent_at:
+        expiry_time = user.password_reset_sent_at + \
+            timezone.timedelta(hours=24)
+        if timezone.now() > expiry_time:
+            messages.error(
+                request, 'This password reset link has expired. Please request a new one.')
+            return redirect('password_reset_request')
+
+    if request.method == 'POST':
+        form = SetPasswordForm(request.POST)
+        if form.is_valid():
+            new_password = form.cleaned_data.get('new_password1')
+            user.set_password(new_password)
+            # Clear the reset token
+            user.password_reset_token = None
+            user.password_reset_sent_at = None
+            user.save()
+
+            messages.success(
+                request, 'Your password has been reset successfully. You can now log in.')
+            return redirect('login')
+    else:
+        form = SetPasswordForm()
+
+    return render(request, 'accounts/password_reset_confirm.html', {'form': form, 'token': token})
 
 
 @login_required

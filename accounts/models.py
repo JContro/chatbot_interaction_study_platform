@@ -39,6 +39,11 @@ class User(AbstractUser):
         default=uuid.uuid4, editable=False)
     email_verified_at = models.DateTimeField(null=True, blank=True)
 
+    # Password reset fields
+    password_reset_token = models.UUIDField(
+        default=uuid.uuid4, editable=False, null=True, blank=True)
+    password_reset_sent_at = models.DateTimeField(null=True, blank=True)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
