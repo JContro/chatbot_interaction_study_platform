@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Chatbot Study{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --claude-bg: #0f0f0f;
+            --claude-surface: #1a1a1a;
+            --claude-border: #2d2d2d;
+            --claude-text: #e5e5e5;
+            --claude-text-muted: #8b8b8b;
+            --claude-accent: #d4a574;
+            --claude-accent-hover: #e5b885;
+            --claude-green: #84cc16;
+        }
+        
+        body {
+            background-color: var(--claude-bg);
+            color: var(--claude-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .claude-card {
+            background-color: var(--claude-surface);
+            border: 1px solid var(--claude-border);
+            border-radius: 12px;
+        }
+        
+        .claude-btn {
+            background-color: var(--claude-accent);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .claude-btn:hover {
+            background-color: var(--claude-accent-hover);
+            color: #000;
+        }
+        
+        .claude-btn-outline {
+            background-color: transparent;
+            color: var(--claude-text);
+            border: 1px solid var(--claude-border);
+        }
+        
+        .claude-btn-outline:hover {
+            background-color: var(--claude-surface);
+            color: var(--claude-text);
+            border-color: var(--claude-text-muted);
+        }
+        
+        .claude-input {
+            background-color: var(--claude-bg);
+            border: 1px solid var(--claude-border);
+            color: var(--claude-text);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        
+        .claude-input:focus {
+            background-color: var(--claude-bg);
+            border-color: var(--claude-accent);
+            color: var(--claude-text);
+            box-shadow: 0 0 0 2px rgba(212, 165, 116, 0.2);
+        }
+        
+        .claude-input::placeholder {
+            color: var(--claude-text-muted);
+        }
+        
+        .claude-logo {
+            color: var(--claude-accent);
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .claude-divider {
+            border-color: var(--claude-border);
+        }
+        
+        .claude-link {
+            color: var(--claude-accent);
+            text-decoration: none;
+        }
+        
+        .claude-link:hover {
+            color: var(--claude-accent-hover);
+            text-decoration: underline;
+        }
+        
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .message-user {
+            background-color: var(--claude-surface);
+            border-radius: 18px 18px 4px 18px;
+            padding: 16px 20px;
+            margin-left: 60px;
+            border: 1px solid var(--claude-border);
+        }
+        
+        .message-assistant {
+            background-color: transparent;
+            border-radius: 18px 18px 18px 4px;
+            padding: 16px 20px;
+            margin-right: 60px;
+            border-left: 3px solid var(--claude-accent);
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+        
+        .avatar-user {
+            background-color: var(--claude-accent);
+            color: #000;
+        }
+        
+        .avatar-assistant {
+            background-color: var(--claude-green);
+            color: #000;
+        }
+        
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: var(--claude-text-muted);
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-5px); }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if messages %}
+        <div class="container mt-3">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    
+    {% block content %}{% endblock %}
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
