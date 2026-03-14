@@ -1,11 +1,19 @@
+import json
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
+
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
 from .models import User, Conversation
 from .utils import send_verification_email, verify_email, send_password_reset_email
+
+logger = logging.getLogger(__name__)
 
 
 def home_view(request):
@@ -219,3 +227,73 @@ def chat_view(request, topic=None):
     conversation = get_object_or_404(Conversation, topic=topic)
 
     return render(request, 'accounts/chat.html', {'conversation': conversation})
+
+
+@login_required
+@require_POST
+def chat_api_view(request):
+    """
+    JSON API endpoint: receive a user message + conversation history,
+    return the LLM's reply.
+
+    Request body (JSON):
+        {
+            "message": "<user text>",
+            "history": [
+                {"role": "user",      "content": "..."},
+                {"role": "assistant", "content": "..."}
+            ]
+        }
+
+    Success response (200):
+        {"response": "<assistant text>"}
+
+    Error response (4xx / 500):
+        {"error": "<reason>"}
+
+    The view is completely provider-agnostic: it talks only to the
+    BaseLLM interface via the registry. Swapping the backend requires
+    no changes here.
+    """
+    # -- parse request body --------------------------------------------------
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    user_message = body.get("message", "").strip()
+    if not user_message:
+        return JsonResponse({"error": "Message cannot be empty."}, status=400)
+
+    raw_history = body.get("history", [])   # list of {role, content} dicts
+
+    # -- call LLM ------------------------------------------------------------
+    try:
+        from .llm.registry import get_llm
+        from .llm.base import ConversationHistory
+
+        # Rebuild server-side ConversationHistory from the client's state.
+        history = ConversationHistory()
+        for entry in raw_history:
+            role = entry.get("role", "user")
+            content = entry.get("content", "")
+            if role and content:
+                history.add_message(role, content)
+
+        # Append the incoming user message so the model sees the full turn.
+        history.add_user_message(user_message)
+
+        llm = get_llm()
+        response_text = llm.generate(
+            prompt=user_message,
+            conversation_history=history,
+        )
+        return JsonResponse({"response": response_text})
+
+    except Exception:
+        logger.exception("LLM generation failed for user '%s'",
+                         request.user.email)
+        return JsonResponse(
+            {"error": "The model encountered an error generating a response."},
+            status=500,
+        )

@@ -150,3 +150,21 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'chat'
 LOGOUT_REDIRECT_URL = 'login'
+
+# ---------------------------------------------------------------------------
+# LLM Configuration
+# ---------------------------------------------------------------------------
+# To swap to a different model or provider, only change values here.
+# Application code (views, templates) is fully provider-agnostic.
+#
+# 'provider'   – dotted import path to any accounts.llm.base.BaseLLM subclass.
+# 'model_name' – passed directly to the provider constructor.
+# All other keys are forwarded as constructor kwargs to the provider.
+#
+# Device options: 'cpu' | 'cuda' | 'mps' | 'auto'
+# ---------------------------------------------------------------------------
+LLM_CONFIG = {
+    "provider": "accounts.llm.huggingface.HuggingFaceLLM",
+    "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
+    "device": os.getenv("LLM_DEVICE", "cpu"),
+}

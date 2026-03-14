@@ -9,6 +9,7 @@ urlpatterns = [
     path('topic-selection/', views.topic_selection_view, name='topic_selection'),
     path('chat/', views.chat_view, name='chat'),
     path('chat/<str:topic>/', views.chat_view, name='chat_topic'),
+    path('chat/api/message/', views.chat_api_view, name='chat_api'),
     path('verify-email/<uuid:token>/',
          views.verify_email_view, name='verify_email'),
     path('password-reset/request/', views.password_reset_request_view,

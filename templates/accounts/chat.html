@@ -35,7 +35,7 @@
                 <i class="bi bi-robot"></i>
             </div>
             <div class="message-assistant">
-                <p class="mb-0">Hello! I'm here to help you with your research on chatbot interactions. 
+                <p class="mb-0">Hello! I'm here to help you with your research on chatbot interactions.
                 How can I assist you today?</p>
             </div>
         </div>
@@ -44,12 +44,13 @@
     <!-- Input Area -->
     <div class="claude-card p-3">
         <form id="chat-form" class="d-flex gap-3">
-            <input type="text" 
-                   id="message-input" 
-                   class="form-control claude-input" 
-                   placeholder="Send a message..."
+            {% csrf_token %}
+            <input type="text"
+                   id="message-input"
+                   class="form-control claude-input"
+                   placeholder="Send a message…"
                    autocomplete="off">
-            <button type="submit" class="btn claude-btn">
+            <button type="submit" id="send-btn" class="btn claude-btn">
                 <i class="bi bi-send"></i>
             </button>
         </form>
@@ -58,73 +59,162 @@
 
 {% block extra_js %}
 <script>
-    const chatForm = document.getElementById('chat-form');
+(function () {
+    'use strict';
+
+    // -----------------------------------------------------------------------
+    // State
+    // -----------------------------------------------------------------------
+    // Conversation history kept in memory and sent with every request so the
+    // server remains stateless.  Format matches the BaseLLM ConversationHistory
+    // wire format: [{role, content}, …].
+    const history = [];
+
+    // API endpoint injected by Django's URL resolver – no hard-coded paths.
+    const API_URL = "{% url 'chat_api' %}";
+
+    // -----------------------------------------------------------------------
+    // Elements
+    // -----------------------------------------------------------------------
+    const chatForm     = document.getElementById('chat-form');
     const messageInput = document.getElementById('message-input');
     const chatMessages = document.getElementById('chat-messages');
+    const sendBtn      = document.getElementById('send-btn');
 
-    chatForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const message = messageInput.trim();
-        if (!message) return;
+    // -----------------------------------------------------------------------
+    // CSRF helper (reads the token Django sets as a cookie)
+    // -----------------------------------------------------------------------
+    function getCsrfToken() {
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                return decodeURIComponent(cookie.slice(name.length + 1));
+            }
+        }
+        // Fallback: pull from the hidden input Django renders via {% csrf_token %}
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
 
-        // Add user message
-        addMessage(message, 'user');
-        messageInput.value = '';
+    // -----------------------------------------------------------------------
+    // XSS-safe HTML escape
+    // -----------------------------------------------------------------------
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(text));
+        return div.innerHTML;
+    }
 
-        // Show typing indicator
-        showTypingIndicator();
+    // -----------------------------------------------------------------------
+    // UI helpers
+    // -----------------------------------------------------------------------
+    function appendMessage(content, sender) {
+        const avatarClass   = sender === 'user' ? 'avatar-user'      : 'avatar-assistant';
+        const messageClass  = sender === 'user' ? 'message-user'     : 'message-assistant';
+        const avatarIcon    = sender === 'user' ? 'bi-person'        : 'bi-robot';
 
-        // Simulate response (replace with actual API call)
-        setTimeout(() => {
-            removeTypingIndicator();
-            addMessage('This is a demo response. Connect to an AI API to enable real conversations.', 'assistant');
-        }, 1500);
-    });
-
-    function addMessage(content, sender) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'd-flex mb-4';
-        
-        const avatarClass = sender === 'user' ? 'avatar-user' : 'avatar-assistant';
-        const messageClass = sender === 'user' ? 'message-user' : 'message-assistant';
-        const avatarIcon = sender === 'user' ? '<i class="bi bi-person"></i>' : '<i class="bi bi-robot"></i>';
-        
-        messageDiv.innerHTML = `
-            <div class="avatar ${avatarClass} me-3">${avatarIcon}</div>
-            <div class="${messageClass}">
-                <p class="mb-0">${content}</p>
-            </div>
+        const wrapper = document.createElement('div');
+        wrapper.className = 'd-flex mb-4';
+        wrapper.innerHTML = `
+            <div class="avatar ${avatarClass} me-3"><i class="bi ${avatarIcon}"></i></div>
+            <div class="${messageClass}"><p class="mb-0">${escapeHtml(content)}</p></div>
         `;
-        
-        chatMessages.appendChild(messageDiv);
+        chatMessages.appendChild(wrapper);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function appendErrorMessage(text) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'd-flex mb-4';
+        wrapper.innerHTML = `
+            <div class="avatar avatar-assistant me-3"><i class="bi bi-exclamation-triangle"></i></div>
+            <div class="message-assistant text-danger"><p class="mb-0">${escapeHtml(text)}</p></div>
+        `;
+        chatMessages.appendChild(wrapper);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     function showTypingIndicator() {
-        const typingDiv = document.createElement('div');
-        typingDiv.id = 'typing-indicator';
-        typingDiv.className = 'd-flex mb-4';
-        typingDiv.innerHTML = `
-            <div class="avatar avatar-assistant me-3">
-                <i class="bi bi-robot"></i>
-            </div>
+        const el = document.createElement('div');
+        el.id = 'typing-indicator';
+        el.className = 'd-flex mb-4';
+        el.innerHTML = `
+            <div class="avatar avatar-assistant me-3"><i class="bi bi-robot"></i></div>
             <div class="message-assistant">
-                <div class="typing-indicator">
-                    <span></span><span></span><span></span>
-                </div>
+                <div class="typing-indicator"><span></span><span></span><span></span></div>
             </div>
         `;
-        chatMessages.appendChild(typingDiv);
+        chatMessages.appendChild(el);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     function removeTypingIndicator() {
-        const indicator = document.getElementById('typing-indicator');
-        if (indicator) {
-            indicator.remove();
-        }
+        const el = document.getElementById('typing-indicator');
+        if (el) el.remove();
     }
+
+    function setInputEnabled(enabled) {
+        messageInput.disabled = !enabled;
+        sendBtn.disabled      = !enabled;
+    }
+
+    // -----------------------------------------------------------------------
+    // Main submit handler
+    // -----------------------------------------------------------------------
+    chatForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const userText = messageInput.value.trim();
+        if (!userText) return;
+
+        // Show user message immediately.
+        appendMessage(userText, 'user');
+        messageInput.value = '';
+        setInputEnabled(false);
+        showTypingIndicator();
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken':  getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    message: userText,
+                    history: history,         // send accumulated history
+                }),
+            });
+
+            removeTypingIndicator();
+
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                appendErrorMessage(data.error || 'An unexpected error occurred.');
+            } else {
+                const assistantText = data.response || '';
+                appendMessage(assistantText, 'assistant');
+
+                // Update in-memory history AFTER a successful round-trip.
+                history.push({ role: 'user',      content: userText });
+                history.push({ role: 'assistant', content: assistantText });
+            }
+        } catch (err) {
+            removeTypingIndicator();
+            appendErrorMessage('Network error – please try again.');
+            console.error('Chat API error:', err);
+        } finally {
+            setInputEnabled(true);
+            messageInput.focus();
+        }
+    });
+
+    // Auto-focus the input on page load.
+    messageInput.focus();
+})();
 </script>
 {% endblock %}
 {% endblock %}
