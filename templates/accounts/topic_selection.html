@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Select Topic - Chatbot Study{% endblock %}
+
+{% block content %}
+<div class="topic-selection-container">
+    <!-- Header -->
+    <nav class="d-flex justify-content-between align-items-center py-3 mb-4 border-bottom border-secondary">
+        <div class="claude-logo">
+            <i class="bi bi-chat-dots-fill"></i> Chatbot Study
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="text-muted">{{ user.email }}</span>
+            <a href="{% url 'logout' %}" class="btn claude-btn-outline btn-sm">
+                <i class="bi bi-box-arrow-right"></i> Sign Out
+            </a>
+        </div>
+    </nav>
+
+    <!-- Topic Selection -->
+    <div class="container">
+        <div class="text-center mb-5">
+            <h1 class="mb-3">Choose a Conversation Topic</h1>
+            <p class="text-muted">Select one of the sample conversations to begin your chat session.</p>
+        </div>
+
+        <div class="row justify-content-center g-4">
+            {% for conv in conversations %}
+            <div class="col-md-6 col-lg-5">
+                <a href="{% url 'chat_topic' topic=conv.topic %}" class="text-decoration-none">
+                    <div class="claude-card topic-card h-100 p-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="topic-icon me-3">
+                                <i class="bi bi-chat-square-text"></i>
+                            </div>
+                            <h3 class="mb-0 topic-title">{{ conv.title }}</h3>
+                        </div>
+                        <p class="text-muted mb-0">{{ conv.description }}</p>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .topic-selection-container {
+        min-height: 80vh;
+    }
+    
+    .topic-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        color: var(--claude-text);
+    }
+    
+    .topic-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--claude-accent);
+        box-shadow: 0 8px 24px rgba(212, 165, 116, 0.15);
+    }
+    
+    .topic-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--claude-accent);
+        color: #000;
+        border-radius: 12px;
+        font-size: 24px;
+    }
+    
+    .topic-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}

@@ -3,6 +3,29 @@ from django.db import models
 import uuid
 
 
+class Conversation(models.Model):
+    """
+    Model representing a conversation topic for the chatbot study.
+    """
+    TOPIC_CHOICES = [
+        ('A', 'Sample A'),
+        ('B', 'Sample B'),
+        ('C', 'Sample C'),
+        ('D', 'Sample D'),
+    ]
+
+    topic = models.CharField(max_length=1, choices=TOPIC_CHOICES, unique=True)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['topic']
+
+    def __str__(self):
+        return self.title
+
+
 class UserManager(BaseUserManager):
     """Custom manager for User model that uses email instead of username."""
 

@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
-from .models import User
+from .models import User, Conversation
 from .utils import send_verification_email, verify_email, send_password_reset_email
 
 
@@ -13,7 +13,7 @@ def home_view(request):
     Landing page with welcome message and login/register links.
     """
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('topic_selection')
     return render(request, 'accounts/home.html')
 
 
@@ -22,7 +22,7 @@ def login_view(request):
     Handle user login with email authentication.
     """
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('topic_selection')
 
     if request.method == 'POST':
         form = CustomAuthenticationForm(request, data=request.POST)
@@ -38,7 +38,7 @@ def login_view(request):
                     return render(request, 'accounts/login.html', {'form': form})
                 login(request, user)
                 messages.success(request, f'Welcome back!')
-                return redirect('chat')
+                return redirect('topic_selection')
             else:
                 messages.error(request, 'Invalid email or password.')
         else:
@@ -54,7 +54,7 @@ def register_view(request):
     Handle user registration with email verification.
     """
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('topic_selection')
 
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
@@ -115,7 +115,7 @@ def password_reset_request_view(request):
     Handle password reset request - show form to enter email.
     """
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('topic_selection')
 
     if request.method == 'POST':
         form = PasswordResetRequestForm(request.POST)
@@ -142,7 +142,7 @@ def password_reset_done_view(request):
     Show confirmation that password reset email was sent.
     """
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('topic_selection')
     return render(request, 'accounts/password_reset_done.html')
 
 
@@ -151,7 +151,7 @@ def password_reset_confirm_view(request, token):
     Handle password reset confirmation - show form to set new password.
     """
     if request.user.is_authenticated:
-        return redirect('chat')
+        return redirect('topic_selection')
 
     user = get_object_or_404(User, password_reset_token=token)
 
@@ -184,7 +184,23 @@ def password_reset_confirm_view(request, token):
 
 
 @login_required
-def chat_view(request):
+def topic_selection_view(request):
+    """
+    View for selecting a conversation topic.
+    """
+    # Check if user's email is verified before allowing access
+    if not request.user.is_email_verified:
+        messages.warning(
+            request, 'Please verify your email address to access the chat.')
+        logout(request)
+        return redirect('login')
+
+    conversations = Conversation.objects.all()
+    return render(request, 'accounts/topic_selection.html', {'conversations': conversations})
+
+
+@login_required
+def chat_view(request, topic=None):
     """
     Main chat view - the main application page.
     """
@@ -195,4 +211,11 @@ def chat_view(request):
         logout(request)
         return redirect('login')
 
-    return render(request, 'accounts/chat.html')
+    # If no topic is selected, redirect to topic selection
+    if topic is None:
+        return redirect('topic_selection')
+
+    # Get the conversation object for the selected topic
+    conversation = get_object_or_404(Conversation, topic=topic)
+
+    return render(request, 'accounts/chat.html', {'conversation': conversation})
