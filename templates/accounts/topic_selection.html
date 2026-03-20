@@ -3,15 +3,15 @@
 {% block title %}Select Topic - Chatbot Study{% endblock %}
 
 {% block content %}
-<div class="topic-selection-container">
+<div class="topic-selection-container" style="padding: 0 20px; max-width: 900px; margin: 0 auto;">
     <!-- Header -->
-    <nav class="d-flex justify-content-between align-items-center py-3 mb-4 border-bottom border-secondary">
+    <nav class="d-flex justify-content-between align-items-center py-3 mb-4" style="border-bottom: 1px solid var(--claude-border);">
         <div class="claude-logo">
             <i class="bi bi-chat-dots-fill"></i> Chatbot Study
         </div>
         <div class="d-flex align-items-center gap-3">
-            <span class="text-muted">{{ user.email }}</span>
-            <a href="{% url 'logout' %}" class="btn claude-btn-outline btn-sm">
+            <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
+            <a href="{% url 'logout' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
                 <i class="bi bi-box-arrow-right"></i> Sign Out
             </a>
         </div>
@@ -19,15 +19,15 @@
 
     <!-- Topic Selection -->
     <div class="container">
-        <div class="text-center mb-5">
-            <h1 class="mb-3">Choose a Conversation Topic</h1>
+        <div class="text-center mb-5" style="padding-top: 40px;">
+            <h1 class="mb-3" style="color: var(--claude-text); font-size: 1.75rem; font-weight: 600;">Choose a Conversation Topic</h1>
             <p class="text-muted">Select one of the sample conversations to begin your chat session.</p>
         </div>
 
         <div class="row justify-content-center g-4">
             {% for conv in conversations %}
             <div class="col-md-6 col-lg-5">
-                <a href="{% url 'chat_topic' topic=conv.topic %}" class="text-decoration-none">
+                <a href="{% url 'chat_topic' topic=conv.topic %}" class="text-decoration-none" style="text-decoration: none;">
                     <div class="claude-card topic-card h-100 p-4">
                         <div class="d-flex align-items-center mb-3">
                             <div class="topic-icon me-3">
@@ -50,32 +50,33 @@
     }
     
     .topic-card {
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
         cursor: pointer;
         color: var(--claude-text);
     }
     
     .topic-card:hover {
-        transform: translateY(-5px);
+        transform: translateY(-3px);
         border-color: var(--claude-accent);
         box-shadow: 0 8px 24px rgba(212, 165, 116, 0.15);
     }
     
     .topic-icon {
-        width: 48px;
-        height: 48px;
+        width: 44px;
+        height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: var(--claude-accent);
-        color: #000;
-        border-radius: 12px;
-        font-size: 24px;
+        background-color: var(--claude-green);
+        color: #18191b;
+        border-radius: 10px;
+        font-size: 20px;
     }
     
     .topic-title {
-        font-size: 1.25rem;
+        font-size: 1.1rem;
         font-weight: 600;
+        color: var(--claude-text);
     }
 </style>
 {% endblock %}
