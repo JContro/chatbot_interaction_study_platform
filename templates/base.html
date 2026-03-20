@@ -45,6 +45,17 @@
             background-color: var(--claude-accent-hover);
             color: #000;
         }
+
+        .claude-btn.recording {
+            background-color: #ef4444;
+            color: #fff;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
         
         .claude-btn-outline {
             background-color: transparent;

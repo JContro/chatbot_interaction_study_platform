@@ -297,3 +297,79 @@ def chat_api_view(request):
             {"error": "The model encountered an error generating a response."},
             status=500,
         )
+
+
+@login_required
+@require_POST
+def transcribe_audio_view(request):
+    """
+    JSON API endpoint: receive audio data, transcribe it using Whisper,
+    return the transcribed text.
+
+    Request body (multipart/form-data):
+        - audio: audio file (webm, wav, mp3)
+
+    Success response (200):
+        {"transcription": "<transcribed text>"}
+
+    Error response (4xx / 500):
+        {"error": "<reason>"}
+    """
+    # -- check for audio file ---------------------------------------------------
+    if 'audio' not in request.FILES:
+        logger.warning("No audio file in request.FILES. Keys: %s",
+                       list(request.FILES.keys()))
+        return JsonResponse({"error": "No audio file provided."}, status=400)
+
+    audio_file = request.FILES['audio']
+    logger.info("Received audio file: name=%s, content_type=%s, size=%s",
+                audio_file.name, audio_file.content_type, audio_file.size)
+
+    # Validate file type - be more permissive to debug
+    # Accept any audio type for now
+    if audio_file.size == 0:
+        return JsonResponse({"error": "Audio file is empty."}, status=400)
+
+    # -- transcribe audio -------------------------------------------------------
+    try:
+        import whisper
+        import tempfile
+        import os
+
+        # Read audio data first to check if it's empty
+        audio_data = audio_file.read()
+        if len(audio_data) < 1000:  # Less than 1KB is likely empty or too short
+            logger.warning("Audio file too small: %s bytes", len(audio_data))
+            return JsonResponse({"error": "Audio recording is too short or empty. Please try recording again."}, status=400)
+
+        # Load Whisper base model fresh each time to avoid caching issues
+        # This is slower but more reliable
+        model = whisper.load_model("base")
+
+        # Save uploaded file to temporary file (Whisper requires a file path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp_file:
+            tmp_file.write(audio_data)
+            tmp_path = tmp_file.name
+
+        try:
+            # Transcribe the audio
+            result = model.transcribe(tmp_path, language='en')
+            transcription = result['text'].strip()
+        finally:
+            # Clean up temporary file
+            os.unlink(tmp_path)
+
+        if not transcription:
+            return JsonResponse({"transcription": ""})
+
+        return JsonResponse({"transcription": transcription})
+
+    except Exception as e:
+        logger.exception("Audio transcription failed for user '%s'",
+                         request.user.email)
+        # Return more detailed error for debugging
+        error_msg = str(e)
+        return JsonResponse(
+            {"error": f"Failed to transcribe audio: {error_msg}"},
+            status=500,
+        )

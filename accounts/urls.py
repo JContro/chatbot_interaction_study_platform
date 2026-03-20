@@ -10,6 +10,8 @@ urlpatterns = [
     path('chat/', views.chat_view, name='chat'),
     path('chat/<str:topic>/', views.chat_view, name='chat_topic'),
     path('chat/api/message/', views.chat_api_view, name='chat_api'),
+    path('chat/api/transcribe/', views.transcribe_audio_view,
+         name='transcribe_audio'),
     path('verify-email/<uuid:token>/',
          views.verify_email_view, name='verify_email'),
     path('password-reset/request/', views.password_reset_request_view,
