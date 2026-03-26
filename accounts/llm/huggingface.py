@@ -103,11 +103,16 @@ class HuggingFaceLLM(BaseLLM):
         self,
         prompt: str,
         conversation_history: Optional[ConversationHistory] = None,
+        topic_data: Optional[Dict[str, Any]] = None,
+        assigned_stance: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
         Generate a reply to *prompt*, optionally using *conversation_history*
         for multi-turn context.
+
+        When topic_data and assigned_stance are provided, the chatbot will be
+        instructed to adopt a specific perspective on the topic.
 
         Generation kwargs (temperature, max_new_tokens, top_p, top_k,
         repetition_penalty, do_sample) can be overridden per-call.
@@ -125,11 +130,21 @@ class HuggingFaceLLM(BaseLLM):
         gen_kwargs = {k: v for k, v in kwargs.items() if k in gen_param_keys}
         params = GenerationParams(**gen_kwargs)
 
+        # ---- build system prompt with topic and stance info ---------------
+        system_prompt = self._build_system_prompt(topic_data, assigned_stance)
+
         # ---- build the message list for the model -------------------------
         if conversation_history is not None:
             messages = conversation_history.get_messages()
+            # Prepend system prompt if we have topic/stance info
+            if system_prompt:
+                messages = [
+                    {"role": "system", "content": system_prompt}] + messages
         else:
             messages = [{"role": "user", "content": prompt}]
+            if system_prompt:
+                messages = [
+                    {"role": "system", "content": system_prompt}] + messages
 
         # ---- format the prompt --------------------------------------------
         if getattr(self._tokenizer, "chat_template", None):
@@ -171,6 +186,45 @@ class HuggingFaceLLM(BaseLLM):
         response = self._tokenizer.decode(
             new_ids, skip_special_tokens=True).strip()
         return response
+
+    def _build_system_prompt(
+        self,
+        topic_data: Optional[Dict[str, Any]] = None,
+        assigned_stance: Optional[str] = None,
+    ) -> str:
+        """
+        Build a system prompt that sets the chatbot's perspective based on
+        the topic and assigned stance.
+        """
+        if not topic_data or not assigned_stance:
+            return ""
+
+        stance_info = topic_data.get('stances', {}).get(assigned_stance, {})
+        if not stance_info:
+            return ""
+
+        # Build a comprehensive system prompt
+        system_parts = [
+            f"You are having a conversation about: {topic_data.get('specific_question', 'Unknown topic')}",
+            f"Topic Area: {topic_data.get('topic_area', 'General')}",
+            f"Primary Exile Archetype: {topic_data.get('primary_exile', 'Not specified')}",
+            f"Intensity: {topic_data.get('intensity', 'medium')}",
+            "",
+            f"Your assigned stance is: {assigned_stance.upper()}",
+            "",
+            "Your perspective positions:",
+            f"- PRO (supporting): {stance_info.get('pro', 'Not available')}",
+            f"- CON (opposing): {stance_info.get('con', 'Not available')}",
+            f"- NEUTRAL (balanced): {stance_info.get('neutral', 'Not available')}",
+            "",
+            "Instructions:",
+            f"- Adopt the {assigned_stance} perspective in your responses",
+            "- Be engaging, thoughtful, and true to your assigned stance",
+            "- You may reference your pro/con/neutral positions as needed",
+            "- Stay in character as a chatbot with this specific viewpoint",
+        ]
+
+        return "\n".join(system_parts)
 
     def get_model_info(self) -> Dict[str, Any]:
         return {

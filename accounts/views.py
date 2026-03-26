@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
@@ -10,8 +11,12 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
-from .models import User, Conversation, ConversationMessage
+from .models import User, Conversation, ConversationMessage, MessageAnnotation
 from .utils import send_verification_email, verify_email, send_password_reset_email
+from .topics_data import (
+    CONVERSATION_TOPICS, get_topic_areas, get_topics_by_area,
+    get_topic_by_id, get_all_stance_types
+)
 
 logger = logging.getLogger(__name__)
 
@@ -203,12 +208,30 @@ def topic_selection_view(request):
         logout(request)
         return redirect('login')
 
-    conversations = Conversation.objects.all()
-    return render(request, 'accounts/topic_selection.html', {'conversations': conversations})
+    # Get all unique topic areas
+    topic_areas = get_topic_areas()
+
+    # Build a structured dictionary of topic areas with their questions
+    topic_areas_with_topics = []
+    for area in topic_areas:
+        topics = get_topics_by_area(area)
+        topic_areas_with_topics.append({
+            'name': area,
+            'topics': topics
+        })
+
+    # Convert to JSON for JavaScript
+    import json
+    topic_areas_json = json.dumps(topic_areas_with_topics)
+
+    return render(request, 'accounts/topic_selection.html', {
+        'topic_areas': topic_areas_with_topics,
+        'topic_areas_json': topic_areas_json
+    })
 
 
 @login_required
-def chat_view(request, topic=None):
+def chat_view(request, topic_id=None):
     """
     Main chat view - the main application page.
     """
@@ -220,13 +243,34 @@ def chat_view(request, topic=None):
         return redirect('login')
 
     # If no topic is selected, redirect to topic selection
-    if topic is None:
+    if topic_id is None:
         return redirect('topic_selection')
 
-    # Get the conversation object for the selected topic
-    conversation = get_object_or_404(Conversation, topic=topic)
+    # Get the topic data
+    topic_data = get_topic_by_id(int(topic_id))
+    if topic_data is None:
+        return redirect('topic_selection')
 
-    return render(request, 'accounts/chat.html', {'conversation': conversation})
+    # Randomly assign a stance to the chatbot
+    stances = list(topic_data['stances'].keys())
+    assigned_stance = random.choice(stances)
+    stance_data = topic_data['stances'][assigned_stance]
+
+    # Create a context with all the necessary information
+    chat_context = {
+        'topic_id': topic_id,
+        'topic_area': topic_data['topic_area'],
+        'specific_question': topic_data['specific_question'],
+        'primary_exile': topic_data['primary_exile'],
+        'intensity': topic_data['intensity'],
+        'intensity_symbol': topic_data['intensity_symbol'],
+        'assigned_stance': assigned_stance,
+        'stance_pro': stance_data['pro'],
+        'stance_con': stance_data['con'],
+        'stance_neutral': stance_data['neutral'],
+    }
+
+    return render(request, 'accounts/chat.html', chat_context)
 
 
 @login_required
@@ -239,7 +283,8 @@ def chat_api_view(request):
     Request body (JSON):
         {
             "message": "<user text>",
-            "topic": "<topic letter (A, B, C, D)>",
+            "topic_id": "<topic ID (1-20)>",
+            "assigned_stance": "<stance type (e.g., conservative)>",
             "history": [
                 {"role": "user",      "content": "..."},
                 {"role": "assistant", "content": "..."}
@@ -266,9 +311,18 @@ def chat_api_view(request):
     if not user_message:
         return JsonResponse({"error": "Message cannot be empty."}, status=400)
 
-    topic = body.get("topic", "").strip().upper()
-    if not topic or topic not in ['A', 'B', 'C', 'D']:
-        return JsonResponse({"error": "Invalid topic."}, status=400)
+    topic_id = body.get("topic_id", "").strip()
+    if not topic_id:
+        return JsonResponse({"error": "Topic ID is required."}, status=400)
+
+    # Validate topic_id exists
+    topic_data = get_topic_by_id(int(topic_id))
+    if topic_data is None:
+        return JsonResponse({"error": "Invalid topic ID."}, status=400)
+
+    assigned_stance = body.get("assigned_stance", "").strip()
+    if not assigned_stance or assigned_stance not in topic_data['stances']:
+        return JsonResponse({"error": "Invalid or missing stance."}, status=400)
 
     raw_history = body.get("history", [])   # list of {role, content} dicts
 
@@ -292,6 +346,8 @@ def chat_api_view(request):
         response_text = llm.generate(
             prompt=user_message,
             conversation_history=history,
+            topic_data=topic_data,
+            assigned_stance=assigned_stance,
         )
 
         # Save messages to database
@@ -396,6 +452,133 @@ def transcribe_audio_view(request):
         error_msg = str(e)
         return JsonResponse(
             {"error": f"Failed to transcribe audio: {error_msg}"},
+            status=500,
+        )
+
+
+@login_required
+@require_POST
+def annotation_api_view(request):
+    """
+    JSON API endpoint for managing message annotations.
+
+    POST body (JSON):
+        {
+            "message_id": "<message ID>",
+            "start_index": <character start offset>,
+            "end_index": <character end offset>,
+            "selected_text": "<text being annotated>",
+            "classification": "<good|bad|null>",
+            "comment": "<optional comment text>"
+        }
+
+    Success response (200):
+        {"id": <annotation_id>, "messageId": "...", ...}
+
+    Error response (4xx / 500):
+        {"error": "<reason>"}
+    """
+    try:
+        import json
+        data = json.loads(request.body)
+
+        message_id = data.get('message_id')
+        start_index = data.get('start_index')
+        end_index = data.get('end_index')
+        selected_text = data.get('selected_text')
+        classification = data.get('classification')
+        comment = data.get('comment', '')
+
+        if not all([message_id, start_index is not None, end_index is not None, selected_text]):
+            return JsonResponse(
+                {"error": "Missing required fields: message_id, start_index, end_index, selected_text"},
+                status=400,
+            )
+
+        # Get the message (temporary ID format: temp-timestamp)
+        from .models import ConversationMessage
+
+        if str(message_id).startswith('temp-'):
+            # This is a temporary message that hasn't been saved yet
+            # For now, return an error - in the future we might want to save messages first
+            return JsonResponse(
+                {"error": "Message must be saved before annotation. Please refresh and try again."},
+                status=400,
+            )
+
+        try:
+            message = ConversationMessage.objects.get(id=message_id)
+        except ConversationMessage.DoesNotExist:
+            return JsonResponse(
+                {"error": "Message not found"},
+                status=404,
+            )
+
+        # Check if annotation already exists for this message at these positions
+        existing = MessageAnnotation.objects.filter(
+            message=message,
+            user=request.user,
+            start_index=start_index,
+            end_index=end_index
+        ).first()
+
+        if existing:
+            # Update existing annotation
+            if classification is None and not comment:
+                # Delete if no classification or comment
+                existing.delete()
+                return JsonResponse({"deleted": True, "id": existing.id})
+            else:
+                existing.classification = classification
+                existing.comment = comment
+                existing.save()
+                return JsonResponse({
+                    "id": existing.id,
+                    "messageId": message.id,
+                    "startIndex": existing.start_index,
+                    "endIndex": existing.end_index,
+                    "text": existing.selected_text,
+                    "classification": existing.classification,
+                    "comment": existing.comment,
+                })
+        else:
+            # Create new annotation
+            if classification is None and not comment:
+                # Nothing to save
+                return JsonResponse(
+                    {"error": "Must provide classification or comment to save annotation"},
+                    status=400,
+                )
+
+            annotation = MessageAnnotation.objects.create(
+                message=message,
+                user=request.user,
+                start_index=start_index,
+                end_index=end_index,
+                selected_text=selected_text,
+                classification=classification,
+                comment=comment,
+            )
+
+            return JsonResponse({
+                "id": annotation.id,
+                "messageId": message.id,
+                "startIndex": annotation.start_index,
+                "endIndex": annotation.end_index,
+                "text": annotation.selected_text,
+                "classification": annotation.classification,
+                "comment": annotation.comment,
+            })
+
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+    except Exception as e:
+        logger.exception("Error in annotation_api_view")
+        return JsonResponse(
+            {"error": f"Failed to process annotation: {str(e)}"},
             status=500,
         )
 

@@ -100,13 +100,22 @@ class BaseLLM(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, conversation_history: Optional[ConversationHistory] = None, **kwargs) -> str:
+    def generate(
+        self,
+        prompt: str,
+        conversation_history: Optional[ConversationHistory] = None,
+        topic_data: Optional[Dict[str, Any]] = None,
+        assigned_stance: Optional[str] = None,
+        **kwargs
+    ) -> str:
         """
         Generate a response to the given prompt.
 
         Args:
             prompt: The user's input prompt
             conversation_history: Optional conversation history for context
+            topic_data: Optional topic data dictionary containing topic info
+            assigned_stance: Optional stance type (e.g., 'conservative')
             **kwargs: Additional generation parameters (temperature, max_tokens, etc.)
 
         Returns:

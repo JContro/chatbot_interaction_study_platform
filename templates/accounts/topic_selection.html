@@ -26,25 +26,44 @@
     <div class="container">
         <div class="text-center mb-5" style="padding-top: 40px;">
             <h1 class="mb-3" style="color: var(--claude-text); font-size: 1.75rem; font-weight: 600;">Choose a Conversation Topic</h1>
-            <p class="text-muted">Select one of the sample conversations to begin your chat session.</p>
+            <p class="text-muted">Select a topic area, then choose a specific question to discuss.</p>
         </div>
 
-        <div class="row justify-content-center g-4">
-            {% for conv in conversations %}
-            <div class="col-md-6 col-lg-5">
-                <a href="{% url 'chat_topic' topic=conv.topic %}" class="text-decoration-none" style="text-decoration: none;">
-                    <div class="claude-card topic-card h-100 p-4">
+        <!-- Step 1: Topic Area Selection -->
+        <div id="step-1" class="topic-step">
+            <h3 class="text-center mb-4" style="color: var(--claude-text); font-size: 1.2rem; font-weight: 500;">
+                <span class="step-badge">1</span> Select Topic Area
+            </h3>
+            <div class="row justify-content-center g-4 mb-4">
+                {% for area in topic_areas %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="claude-card topic-area-card h-100 p-4" data-topic-area="{{ area.name }}">
                         <div class="d-flex align-items-center mb-3">
                             <div class="topic-icon me-3">
-                                <i class="bi bi-chat-square-text"></i>
+                                <i class="bi bi-folder"></i>
                             </div>
-                            <h3 class="mb-0 topic-title">{{ conv.title }}</h3>
+                            <h3 class="mb-0 topic-title">{{ area.name }}</h3>
                         </div>
-                        <p class="text-muted mb-0">{{ conv.description }}</p>
+                        <p class="text-muted mb-0" style="font-size: 13px;">
+                            {{ area.topics|length }} conversation{{ area.topics|length|pluralize:",s" }}
+                        </p>
                     </div>
-                </a>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
+        </div>
+
+        <!-- Step 2: Specific Question Selection -->
+        <div id="step-2" class="topic-step" style="display: none;">
+            <button id="back-to-areas" class="claude-btn-outline btn-sm mb-4">
+                <i class="bi bi-arrow-left"></i> Back to Topic Areas
+            </button>
+            <h3 class="text-center mb-4" style="color: var(--claude-text); font-size: 1.2rem; font-weight: 500;">
+                <span class="step-badge">2</span> Select Specific Question
+            </h3>
+            <div id="questions-container" class="row justify-content-center g-4">
+                <!-- Questions will be populated by JavaScript -->
+            </div>
         </div>
     </div>
 </div>
@@ -54,13 +73,27 @@
         min-height: 80vh;
     }
     
-    .topic-card {
+    .step-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        background-color: var(--claude-accent);
+        color: #18191b;
+        border-radius: 50%;
+        font-size: 14px;
+        font-weight: 600;
+        margin-right: 8px;
+    }
+    
+    .topic-area-card {
         transition: all 0.2s ease;
         cursor: pointer;
         color: var(--claude-text);
     }
     
-    .topic-card:hover {
+    .topic-area-card:hover {
         transform: translateY(-3px);
         border-color: var(--claude-accent);
         box-shadow: 0 8px 24px rgba(212, 165, 116, 0.15);
@@ -83,5 +116,105 @@
         font-weight: 600;
         color: var(--claude-text);
     }
+    
+    .question-card {
+        transition: all 0.2s ease;
+        cursor: pointer;
+        color: var(--claude-text);
+    }
+    
+    .question-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--claude-accent);
+        box-shadow: 0 8px 24px rgba(212, 165, 116, 0.15);
+    }
+    
+    .intensity-badge {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background-color: var(--claude-accent-subtle);
+        color: var(--claude-accent);
+    }
+    
+    .exile-label {
+        font-size: 12px;
+        color: var(--claude-text-light);
+        font-style: italic;
+    }
 </style>
+
+<script>
+    // Topic data passed from Django
+    const topicAreas = {{ topic_areas_json|safe }};
+    
+    // Step 1 elements
+    const step1 = document.getElementById('step-1');
+    const topicAreaCards = document.querySelectorAll('.topic-area-card');
+    
+    // Step 2 elements
+    const step2 = document.getElementById('step-2');
+    const backBtn = document.getElementById('back-to-areas');
+    const questionsContainer = document.getElementById('questions-container');
+    
+    // Handle topic area selection
+    topicAreaCards.forEach(card => {
+        card.addEventListener('click', () => {
+            const topicAreaName = card.dataset.topicArea;
+            const areaData = topicAreas.find(a => a.name === topicAreaName);
+            
+            if (areaData) {
+                showQuestions(areaData);
+            }
+        });
+    });
+    
+    // Handle back button
+    backBtn.addEventListener('click', () => {
+        step1.style.display = 'block';
+        step2.style.display = 'none';
+    });
+    
+    function showQuestions(areaData) {
+        // Clear previous questions
+        questionsContainer.innerHTML = '';
+        
+        // Populate questions
+        areaData.topics.forEach(topic => {
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-5';
+            
+            const intensityClass = topic.intensity === 'low' ? 'intensity-low' : 
+                                  topic.intensity === 'medium' ? 'intensity-medium' : 'intensity-high';
+            
+            col.innerHTML = `
+                <a href="/chat/${topic.id}/" class="text-decoration-none">
+                    <div class="claude-card question-card h-100 p-4">
+                        <div class="d-flex align-items-start mb-3">
+                            <div class="question-icon me-3">
+                                <span style="font-size: 20px;">${topic.intensity_symbol}</span>
+                            </div>
+                            <div>
+                                <h4 class="mb-1" style="font-size: 1rem; font-weight: 600;">${topic.specific_question}</h4>
+                                <span class="exile-label">Primary exile: ${topic.primary_exile}</span>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <span class="intensity-badge">${topic.intensity} intensity</span>
+                        </div>
+                    </div>
+                </a>
+            `;
+            
+            questionsContainer.appendChild(col);
+        });
+        
+        // Show step 2
+        step1.style.display = 'none';
+        step2.style.display = 'block';
+        
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
 {% endblock %}

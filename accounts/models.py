@@ -50,6 +50,44 @@ class ConversationMessage(models.Model):
         return f"{self.role}: {self.content[:50]}..."
 
 
+class MessageAnnotation(models.Model):
+    """
+    Model representing an annotation/analysis on a portion of a message.
+    Allows sentence-level classification and comments.
+    """
+    CLASSIFICATION_CHOICES = [
+        ('good', 'Good'),
+        ('bad', 'Bad'),
+    ]
+
+    message = models.ForeignKey(
+        ConversationMessage, on_delete=models.CASCADE, related_name='annotations')
+    user = models.ForeignKey(
+        'User', on_delete=models.CASCADE, related_name='message_annotations')
+
+    # Sentence-level targeting
+    start_index = models.IntegerField(
+        help_text="Character offset where the annotation starts")
+    end_index = models.IntegerField(
+        help_text="Character offset where the annotation ends")
+    selected_text = models.TextField(
+        help_text="The actual text being annotated")
+
+    # Classification and comment
+    classification = models.CharField(
+        max_length=20, choices=CLASSIFICATION_CHOICES, blank=True, null=True)
+    comment = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Annotation on '{self.selected_text[:30]}...' by {self.user.email}"
+
+
 class UserManager(BaseUserManager):
     """Custom manager for User model that uses email instead of username."""
 

@@ -3,16 +3,26 @@
 {% block title %}Chat - Chatbot Study{% endblock %}
 
 {% block content %}
-<div class="chat-container" data-topic="{{ conversation.topic }}">
+<div class="chat-container" 
+     data-topic-id="{{ topic_id }}"
+     data-assigned-stance="{{ assigned_stance }}"
+     data-stance-pro="{{ stance_pro|escapejs }}"
+     data-stance-con="{{ stance_con|escapejs }}"
+     data-stance-neutral="{{ stance_neutral|escapejs }}">
     <!-- Header -->
     <nav class="d-flex justify-content-between align-items-center py-3 mb-3" style="border-bottom: 1px solid var(--claude-border);">
         <div class="d-flex align-items-center gap-3">
             <div class="claude-logo">
                 <i class="bi bi-chat-dots-fill"></i> Chatbot Study
             </div>
-            {% if conversation %}
+            {% if topic_area %}
             <span class="badge" style="background-color: var(--claude-accent-subtle); color: var(--claude-accent); border: 1px solid var(--claude-accent);">
-                <i class="bi bi-tag"></i> {{ conversation.title }}
+                <i class="bi bi-tag"></i> {{ topic_area }}
+            </span>
+            {% endif %}
+            {% if specific_question %}
+            <span class="badge bg-secondary">
+                {{ specific_question }}
             </span>
             {% endif %}
         </div>
@@ -32,42 +42,125 @@
         </div>
     </nav>
 
-    <!-- Chat Messages -->
-    <div id="chat-messages" class="chat-messages mb-3">
-        <!-- Welcome Message -->
-        <div class="message-wrapper assistant">
-            <div class="avatar avatar-assistant me-3">
-                <i class="bi bi-robot"></i>
-            </div>
-            <div class="message-assistant">
-                <p class="mb-0">Hello! I'm here to help you with your research on chatbot interactions.
-                How can I assist you today?</p>
-            </div>
+    <!-- Stance Info Banner -->
+    {% if assigned_stance %}
+    <div class="stance-banner mb-3" style="background: linear-gradient(135deg, rgba(212, 165, 116, 0.1) 0%, rgba(212, 165, 116, 0.05) 100%); border: 1px solid var(--claude-accent); border-radius: 8px; padding: 12px 16px;">
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-person-badge" style="color: var(--claude-accent);"></i>
+            <span style="font-weight: 600; color: var(--claude-text);">Chatbot Stance:</span>
+            <span class="badge" style="background-color: var(--claude-accent); color: #18191b;">{{ assigned_stance|title }}</span>
+        </div>
+        <div class="stance-positions" style="font-size: 13px; color: var(--claude-text-light);">
+            <div class="mb-1"><strong>Pro:</strong> {{ stance_pro|truncatechars:150 }}</div>
+            <div class="mb-1"><strong>Con:</strong> {{ stance_con|truncatechars:150 }}</div>
+            <div><strong>Neutral:</strong> {{ stance_neutral|truncatechars:150 }}</div>
         </div>
     </div>
+    {% endif %}
 
-    <!-- Input Area -->
-    <div class="claude-card" style="padding: 16px; border-radius: 12px;">
-        <form id="chat-form" class="d-flex gap-3 align-items-center">
-            {% csrf_token %}
-            <input type="text"
-                   id="message-input"
-                   class="claude-input"
-                   placeholder="Send a message…"
-                   autocomplete="off"
-                   style="flex: 1;">
-            <button type="button" id="record-btn" class="claude-btn" title="Click to record audio" style="width: 44px; height: 44px; padding: 0;">
-                <i class="bi bi-mic"></i>
-            </button>
-            <button type="submit" id="send-btn" class="claude-btn" style="width: 44px; height: 44px; padding: 0;">
-                <i class="bi bi-send"></i>
-            </button>
-        </form>
-        <div id="recording-indicator" class="mt-2" style="display: none; color: var(--claude-red); font-size: 13px;">
-            <i class="bi bi-record-circle" style="animation: pulse 1s infinite;"></i> Recording... Click mic to stop
+    <!-- Main Content: Chat + Analysis Panel -->
+    <div class="row" style="height: calc(100vh - 250px);">
+        <!-- Left: Chat Messages -->
+        <div class="col-7" style="display: flex; flex-direction: column;">
+            <div id="chat-messages" class="chat-messages mb-3" style="flex: 1; overflow-y: auto;">
+                <!-- Welcome Message -->
+                <div class="message-wrapper assistant">
+                    <div class="avatar avatar-assistant me-3">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <div class="message-assistant">
+                        <p class="mb-2">Hello! I'm here to discuss <strong>{{ specific_question }}</strong> with you.</p>
+                        {% if primary_exile %}
+                        <p class="mb-0" style="font-size: 13px; color: var(--claude-text-light);">
+                            <i class="bi bi-lightbulb"></i> This topic relates to the exile archetype: <strong>{{ primary_exile }}</strong>
+                            ({{ intensity }} intensity {{ intensity_symbol }})
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="claude-card" style="padding: 16px; border-radius: 12px;">
+                <form id="chat-form" class="d-flex gap-3 align-items-center">
+                    {% csrf_token %}
+                    <input type="text"
+                           id="message-input"
+                           class="claude-input"
+                           placeholder="Send a message…"
+                           autocomplete="off"
+                           style="flex: 1;">
+                    <button type="button" id="record-btn" class="claude-btn" title="Click to record audio" style="width: 44px; height: 44px; padding: 0;">
+                        <i class="bi bi-mic"></i>
+                    </button>
+                    <button type="submit" id="send-btn" class="claude-btn" style="width: 44px; height: 44px; padding: 0;">
+                        <i class="bi bi-send"></i>
+                    </button>
+                </form>
+                <div id="recording-indicator" class="mt-2" style="display: none; color: var(--claude-red); font-size: 13px;">
+                    <i class="bi bi-record-circle" style="animation: pulse 1s infinite;"></i> Recording... Click mic to stop
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Analysis Panel -->
+        <div class="col-5" style="border-left: 1px solid var(--claude-border); padding-left: 20px;">
+            <div class="analysis-panel">
+                <h5 style="margin-bottom: 16px; color: var(--claude-text);">
+                    <i class="bi bi-clipboard2-check"></i> Chat Analysis
+                </h5>
+                
+                <!-- Instruction -->
+                <p style="font-size: 13px; color: var(--claude-text-muted); margin-bottom: 16px;">
+                    Select text in the chat to annotate it. Click on annotated sentences below to edit.
+                </p>
+
+                <!-- Annotation Form (Hidden by default) -->
+                <div id="annotation-form" class="claude-card mb-3" style="display: none; padding: 16px;">
+                    <h6 style="margin-bottom: 12px; color: var(--claude-accent);">Annotate Selection</h6>
+                    <div id="selected-text-preview" style="font-size: 13px; color: var(--claude-text-muted); margin-bottom: 12px; padding: 8px; background: var(--claude-surface-hover); border-radius: 6px;"></div>
+                    
+                    <div class="mb-3">
+                        <label style="font-size: 13px; color: var(--claude-text); margin-bottom: 8px;">Classification</label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="classification-btn btn btn-sm" data-classification="good" style="background: var(--claude-green-subtle); color: var(--claude-green); border: 1px solid var(--claude-green);">
+                                <i class="bi bi-check-circle"></i> Good
+                            </button>
+                            <button type="button" class="classification-btn btn btn-sm" data-classification="bad" style="background: var(--claude-red-subtle); color: var(--claude-red); border: 1px solid var(--claude-red);">
+                                <i class="bi bi-x-circle"></i> Bad
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="annotation-comment" style="font-size: 13px; color: var(--claude-text); margin-bottom: 8px;">Comment</label>
+                        <textarea id="annotation-comment" class="form-control" rows="2" placeholder="Add a comment about this text..."></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="button" id="save-annotation-btn" class="claude-btn btn-sm">
+                            <i class="bi bi-check"></i> Save
+                        </button>
+                        <button type="button" id="cancel-annotation-btn" class="claude-btn-outline btn-sm">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                        <button type="button" id="delete-annotation-btn" class="btn btn-sm" style="color: var(--claude-red); border: 1px solid var(--claude-red); background: transparent; display: none;">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Annotated Sentences List -->
+                <div id="annotations-list">
+                    <p style="font-size: 13px; color: var(--claude-text-dim); font-style: italic;">
+                        No annotations yet. Select text in the chat to create one.
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
@@ -77,18 +170,18 @@
     // -----------------------------------------------------------------------
     // State
     // -----------------------------------------------------------------------
-    // Get topic from container data attribute
     const chatContainer = document.querySelector('.chat-container');
-    const TOPIC = chatContainer ? chatContainer.dataset.topic : '';
+    const TOPIC_ID = chatContainer ? chatContainer.dataset.topicId : '';
+    const ASSIGNED_STANCE = chatContainer ? chatContainer.dataset.assignedStance : '';
+    const STANCE_PRO = chatContainer ? chatContainer.dataset.stancePro : '';
+    const STANCE_CON = chatContainer ? chatContainer.dataset.stanceCon : '';
+    const STANCE_NEUTRAL = chatContainer ? chatContainer.dataset.stanceNeutral : '';
 
-    // Conversation history kept in memory and sent with every request so the
-    // server remains stateless.  Format matches the BaseLLM ConversationHistory
-    // wire format: [{role, content}, …].
     const history = [];
 
-    // API endpoint injected by Django's URL resolver – no hard-coded paths.
     const API_URL = "{% url 'chat_api' %}";
     const TRANSCRIBE_URL = "{% url 'transcribe_audio' %}";
+    const ANNOTATION_API_URL = "{% url 'annotation_api' %}";
 
     // -----------------------------------------------------------------------
     // Elements
@@ -99,6 +192,21 @@
     const sendBtn      = document.getElementById('send-btn');
     const recordBtn    = document.getElementById('record-btn');
     const recordingIndicator = document.getElementById('recording-indicator');
+    const annotationForm = document.getElementById('annotation-form');
+    const selectedTextPreview = document.getElementById('selected-text-preview');
+    const annotationComment = document.getElementById('annotation-comment');
+    const annotationsList = document.getElementById('annotations-list');
+    const saveAnnotationBtn = document.getElementById('save-annotation-btn');
+    const cancelAnnotationBtn = document.getElementById('cancel-annotation-btn');
+    const deleteAnnotationBtn = document.getElementById('delete-annotation-btn');
+    const classificationBtns = document.querySelectorAll('.classification-btn');
+
+    // -----------------------------------------------------------------------
+    // Annotation State
+    // -----------------------------------------------------------------------
+    let currentSelection = null;
+    let currentAnnotation = null;
+    let selectedClassification = null;
 
     // -----------------------------------------------------------------------
     // Audio Recording State
@@ -125,8 +233,6 @@
             mediaRecorder.onstop = async function() {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 await transcribeAudio(audioBlob);
-                
-                // Stop all tracks to release microphone
                 stream.getTracks().forEach(track => track.stop());
             };
 
@@ -172,9 +278,7 @@
 
             if (!response.ok || data.error) {
                 appendErrorMessage(data.error || 'Failed to transcribe audio.');
-                console.error('Transcription error details:', data.error);
             } else if (data.transcription) {
-                // Set the transcribed text in the input field
                 messageInput.value = data.transcription;
                 messageInput.focus();
             }
@@ -188,7 +292,6 @@
         }
     }
 
-    // Record button click handler
     recordBtn.addEventListener('click', function() {
         if (isRecording) {
             stopRecording();
@@ -198,7 +301,7 @@
     });
 
     // -----------------------------------------------------------------------
-    // CSRF helper (reads the token Django sets as a cookie)
+    // CSRF helper
     // -----------------------------------------------------------------------
     function getCsrfToken() {
         const name = 'csrftoken';
@@ -209,7 +312,6 @@
                 return decodeURIComponent(cookie.slice(name.length + 1));
             }
         }
-        // Fallback: pull from the hidden input Django renders via {% csrf_token %}
         const input = document.querySelector('[name=csrfmiddlewaretoken]');
         return input ? input.value : '';
     }
@@ -226,20 +328,25 @@
     // -----------------------------------------------------------------------
     // UI helpers
     // -----------------------------------------------------------------------
-    function appendMessage(content, sender) {
+    function appendMessage(content, sender, messageId) {
         const wrapperClass  = sender === 'user' ? 'message-wrapper user' : 'message-wrapper assistant';
-        const avatarClass   = sender === 'user' ? 'avatar-user'           : 'avatar-assistant';
-        const messageClass  = sender === 'user' ? 'message-user'          : 'message-assistant';
+        const avatarClass   = sender === 'user' ? 'avatar avatar-user'           : 'avatar avatar-assistant';
+        const messageClass  = sender === 'user' ? 'message message-user'          : 'message message-assistant';
         const avatarIcon    = sender === 'user' ? 'bi-person'            : 'bi-robot';
 
         const wrapper = document.createElement('div');
         wrapper.className = wrapperClass;
+        wrapper.dataset.messageId = messageId || '';
         wrapper.innerHTML = `
-            <div class="avatar ${avatarClass} me-3"><i class="bi ${avatarIcon}"></i></div>
-            <div class="${messageClass}"><p class="mb-0">${escapeHtml(content)}</p></div>
+            <div class="${avatarClass} me-3"><i class="bi ${avatarIcon}"></i></div>
+            <div class="${messageClass} selectable-text" data-message-id="${messageId || ''}"><p class="mb-0">${escapeHtml(content)}</p></div>
         `;
         chatMessages.appendChild(wrapper);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Add click handler for text selection
+        const selectableText = wrapper.querySelector('.selectable-text');
+        selectableText.addEventListener('mouseup', handleTextSelection);
     }
 
     function appendErrorMessage(text) {
@@ -278,6 +385,168 @@
     }
 
     // -----------------------------------------------------------------------
+    // Text Selection & Annotation Functions
+    // -----------------------------------------------------------------------
+    function handleTextSelection(e) {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        
+        if (selectedText.length > 0) {
+            const range = selection.getRangeAt(0);
+            const messageEl = e.currentTarget;
+            const messageId = messageEl.dataset.messageId;
+            
+            if (messageId) {
+                currentSelection = {
+                    messageId: messageId,
+                    text: selectedText,
+                    startIndex: getTextOffset(messageEl, range.startContainer, range.startOffset),
+                    endIndex: getTextOffset(messageEl, range.endContainer, range.endOffset)
+                };
+                showAnnotationForm(currentSelection, null);
+            }
+        }
+    }
+
+    function getTextOffset(containerElement, node, offset) {
+        // Calculate character offset within the message content
+        const textContent = containerElement.textContent;
+        const selectedText = window.getSelection().toString();
+        const startIndex = textContent.indexOf(selectedText);
+        return startIndex >= 0 ? startIndex : 0;
+    }
+
+    function showAnnotationForm(selection, existingAnnotation) {
+        currentAnnotation = existingAnnotation;
+        selectedTextPreview.textContent = `"${selection.text}"`;
+        annotationComment.value = existingAnnotation ? existingAnnotation.comment : '';
+        selectedClassification = existingAnnotation ? existingAnnotation.classification : null;
+        
+        // Update classification button states
+        classificationBtns.forEach(btn => {
+            btn.style.opacity = '0.5';
+            if (btn.dataset.classification === selectedClassification) {
+                btn.style.opacity = '1';
+            }
+        });
+
+        // Show/hide delete button
+        deleteAnnotationBtn.style.display = existingAnnotation ? 'block' : 'none';
+        
+        annotationForm.style.display = 'block';
+    }
+
+    function hideAnnotationForm() {
+        annotationForm.style.display = 'none';
+        currentSelection = null;
+        currentAnnotation = null;
+        selectedClassification = null;
+        annotationComment.value = '';
+        classificationBtns.forEach(btn => btn.style.opacity = '0.5');
+        window.getSelection().removeAllRanges();
+    }
+
+    function updateAnnotationsList() {
+        if (annotations.length === 0) {
+            annotationsList.innerHTML = `
+                <p style="font-size: 13px; color: var(--claude-text-dim); font-style: italic;">
+                    No annotations yet. Select text in the chat to create one.
+                </p>
+            `;
+            return;
+        }
+
+        annotationsList.innerHTML = annotations.map(ann => `
+            <div class="annotation-item mb-2" data-annotation-id="${ann.id}" style="padding: 10px; background: var(--claude-surface-hover); border-radius: 8px; cursor: pointer; border-left: 3px solid ${ann.classification === 'good' ? 'var(--claude-green)' : 'var(--claude-red)'};">
+                <div style="font-size: 12px; color: var(--claude-text-muted); margin-bottom: 4px;">
+                    <span class="badge" style="background: ${ann.classification === 'good' ? 'var(--claude-green-subtle)' : 'var(--claude-red-subtle)'}; color: ${ann.classification === 'good' ? 'var(--claude-green)' : 'var(--claude-red)'};">
+                        ${ann.classification || 'Unclassified'}
+                    </span>
+                    <span style="margin-left: 8px;">Message #${ann.messageId}</span>
+                </div>
+                <div style="font-size: 13px; color: var(--claude-text);">"${escapeHtml(ann.text)}"</div>
+                ${ann.comment ? `<div style="font-size: 12px; color: var(--claude-text-muted); margin-top: 4px; font-style: italic;">${escapeHtml(ann.comment)}</div>` : ''}
+            </div>
+        `).join('');
+
+        // Add click handlers
+        annotationsList.querySelectorAll('.annotation-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const ann = annotations.find(a => a.id == item.dataset.annotationId);
+                if (ann) {
+                    currentSelection = {
+                        messageId: ann.messageId,
+                        text: ann.text,
+                        startIndex: ann.startIndex,
+                        endIndex: ann.endIndex
+                    };
+                    showAnnotationForm(currentSelection, ann);
+                }
+            });
+        });
+    }
+
+    async function saveAnnotation() {
+        if (!currentSelection) return;
+
+        try {
+            const response = await fetch(ANNOTATION_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    message_id: currentSelection.messageId,
+                    start_index: currentSelection.startIndex,
+                    end_index: currentSelection.endIndex,
+                    selected_text: currentSelection.text,
+                    classification: selectedClassification,
+                    comment: annotationComment.value
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                console.error('Error saving annotation:', data.error);
+            } else {
+                if (data.deleted) {
+                    annotations = annotations.filter(a => a.id !== data.id);
+                } else if (currentAnnotation) {
+                    // Update existing
+                    const index = annotations.findIndex(a => a.id === currentAnnotation.id);
+                    if (index !== -1) annotations[index] = data;
+                } else {
+                    // Add new
+                    annotations.push(data);
+                }
+                updateAnnotationsList();
+                hideAnnotationForm();
+            }
+        } catch (err) {
+            console.error('Error saving annotation:', err);
+        }
+    }
+
+    // Event listeners for annotation
+    classificationBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedClassification = btn.dataset.classification;
+            classificationBtns.forEach(b => b.style.opacity = '0.5');
+            btn.style.opacity = '1';
+        });
+    });
+
+    saveAnnotationBtn.addEventListener('click', saveAnnotation);
+    cancelAnnotationBtn.addEventListener('click', hideAnnotationForm);
+    deleteAnnotationBtn.addEventListener('click', () => {
+        if (currentAnnotation) {
+            saveAnnotation(); // Will delete if we send delete flag
+        }
+    });
+
+    // -----------------------------------------------------------------------
     // Main submit handler
     // -----------------------------------------------------------------------
     chatForm.addEventListener('submit', async function (e) {
@@ -286,8 +555,7 @@
         const userText = messageInput.value.trim();
         if (!userText) return;
 
-        // Show user message immediately.
-        appendMessage(userText, 'user');
+        appendMessage(userText, 'user', 'temp-' + Date.now());
         messageInput.value = '';
         setInputEnabled(false);
         showTypingIndicator();
@@ -301,8 +569,9 @@
                 },
                 body: JSON.stringify({
                     message: userText,
-                    topic: TOPIC,
-                    history: history,         // send accumulated history
+                    topic_id: TOPIC_ID,
+                    assigned_stance: ASSIGNED_STANCE,
+                    history: history,
                 }),
             });
 
@@ -314,9 +583,8 @@
                 appendErrorMessage(data.error || 'An unexpected error occurred.');
             } else {
                 const assistantText = data.response || '';
-                appendMessage(assistantText, 'assistant');
+                appendMessage(assistantText, 'assistant', 'temp-' + Date.now());
 
-                // Update in-memory history AFTER a successful round-trip.
                 history.push({ role: 'user',      content: userText });
                 history.push({ role: 'assistant', content: assistantText });
             }
@@ -330,9 +598,8 @@
         }
     });
 
-    // Auto-focus the input on page load.
+    // Initialize
     messageInput.focus();
 })();
 </script>
-{% endblock %}
 {% endblock %}
