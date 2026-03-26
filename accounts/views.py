@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
-from .models import User, Conversation
+from .models import User, Conversation, ConversationMessage
 from .utils import send_verification_email, verify_email, send_password_reset_email
 
 logger = logging.getLogger(__name__)
@@ -239,6 +239,7 @@ def chat_api_view(request):
     Request body (JSON):
         {
             "message": "<user text>",
+            "topic": "<topic letter (A, B, C, D)>",
             "history": [
                 {"role": "user",      "content": "..."},
                 {"role": "assistant", "content": "..."}
@@ -265,6 +266,10 @@ def chat_api_view(request):
     if not user_message:
         return JsonResponse({"error": "Message cannot be empty."}, status=400)
 
+    topic = body.get("topic", "").strip().upper()
+    if not topic or topic not in ['A', 'B', 'C', 'D']:
+        return JsonResponse({"error": "Invalid topic."}, status=400)
+
     raw_history = body.get("history", [])   # list of {role, content} dicts
 
     # -- call LLM ------------------------------------------------------------
@@ -288,6 +293,26 @@ def chat_api_view(request):
             prompt=user_message,
             conversation_history=history,
         )
+
+        # Save messages to database
+        conversation = Conversation.objects.get(topic=topic)
+
+        # Save user message
+        ConversationMessage.objects.create(
+            user=request.user,
+            conversation=conversation,
+            role='user',
+            content=user_message
+        )
+
+        # Save assistant response
+        ConversationMessage.objects.create(
+            user=request.user,
+            conversation=conversation,
+            role='assistant',
+            content=response_text
+        )
+
         return JsonResponse({"response": response_text})
 
     except Exception:
@@ -373,3 +398,72 @@ def transcribe_audio_view(request):
             {"error": f"Failed to transcribe audio: {error_msg}"},
             status=500,
         )
+
+
+@login_required
+def admin_conversations_view(request):
+    """
+    Admin view to see all conversations across all users.
+    Only staff users can access this view.
+    """
+    if not request.user.is_staff:
+        messages.error(
+            request, 'You do not have permission to access this page.')
+        return redirect('topic_selection')
+
+    # Get all users who have conversations
+    users_with_conversations = User.objects.filter(
+        messages__isnull=False
+    ).distinct().prefetch_related('messages')
+
+    # Get conversation stats
+    conversation_data = []
+    for user in users_with_conversations:
+        messages = user.messages.all()
+        topics = {}
+        for msg in messages:
+            topic_key = msg.conversation.topic
+            if topic_key not in topics:
+                topics[topic_key] = {
+                    'topic': msg.conversation,
+                    'messages': [],
+                    'message_count': 0
+                }
+            topics[topic_key]['messages'].append(msg)
+            topics[topic_key]['message_count'] += 1
+
+        conversation_data.append({
+            'user': user,
+            'topics': topics,
+            'total_messages': messages.count()
+        })
+
+    return render(request, 'accounts/admin_conversations.html', {
+        'conversation_data': conversation_data,
+    })
+
+
+@login_required
+def admin_conversation_detail_view(request, user_id, topic):
+    """
+    Admin view to see a specific user's conversation for a specific topic.
+    Only staff users can access this view.
+    """
+    if not request.user.is_staff:
+        messages.error(
+            request, 'You do not have permission to access this page.')
+        return redirect('topic_selection')
+
+    user = get_object_or_404(User, id=user_id)
+    conversation = get_object_or_404(Conversation, topic=topic)
+
+    messages = ConversationMessage.objects.filter(
+        user=user,
+        conversation=conversation
+    ).order_by('created_at')
+
+    return render(request, 'accounts/admin_conversation_detail.html', {
+        'user': user,
+        'conversation': conversation,
+        'messages': messages,
+    })

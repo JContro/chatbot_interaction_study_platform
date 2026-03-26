@@ -3,7 +3,7 @@
 {% block title %}Chat - Chatbot Study{% endblock %}
 
 {% block content %}
-<div class="chat-container">
+<div class="chat-container" data-topic="{{ conversation.topic }}">
     <!-- Header -->
     <nav class="d-flex justify-content-between align-items-center py-3 mb-3" style="border-bottom: 1px solid var(--claude-border);">
         <div class="d-flex align-items-center gap-3">
@@ -20,6 +20,11 @@
             <a href="{% url 'topic_selection' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
                 <i class="bi bi-arrow-left"></i> Topics
             </a>
+            {% if user.is_staff %}
+            <a href="{% url 'admin_conversations' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;" title="Admin Panel" target="_blank">
+                <i class="bi bi-shield-lock"></i> Admin
+            </a>
+            {% endif %}
             <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
             <a href="{% url 'logout' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
                 <i class="bi bi-box-arrow-right"></i> Sign Out
@@ -72,6 +77,10 @@
     // -----------------------------------------------------------------------
     // State
     // -----------------------------------------------------------------------
+    // Get topic from container data attribute
+    const chatContainer = document.querySelector('.chat-container');
+    const TOPIC = chatContainer ? chatContainer.dataset.topic : '';
+
     // Conversation history kept in memory and sent with every request so the
     // server remains stateless.  Format matches the BaseLLM ConversationHistory
     // wire format: [{role, content}, …].
@@ -292,6 +301,7 @@
                 },
                 body: JSON.stringify({
                     message: userText,
+                    topic: TOPIC,
                     history: history,         // send accumulated history
                 }),
             });

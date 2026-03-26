@@ -20,4 +20,9 @@ urlpatterns = [
          name='password_reset_done'),
     path('password-reset/<uuid:token>/',
          views.password_reset_confirm_view, name='password_reset_confirm'),
+    # Admin views
+    path('study-admin/conversations/', views.admin_conversations_view,
+         name='admin_conversations'),
+    path('study-admin/conversations/<int:user_id>/<str:topic>/',
+         views.admin_conversation_detail_view, name='admin_conversation_detail'),
 ]

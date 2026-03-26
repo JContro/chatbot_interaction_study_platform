@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin - Conversations - Chatbot Study{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav class="d-flex justify-content-between align-items-center py-3 mb-4" style="border-bottom: 1px solid var(--claude-border);">
+        <div class="d-flex align-items-center gap-3">
+            <div class="claude-logo">
+                <i class="bi bi-shield-lock"></i> Admin Panel
+            </div>
+            <span class="text-muted">/ Conversations</span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <a href="{% url 'topic_selection' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-arrow-left"></i> Back to Topics
+            </a>
+        </div>
+    </nav>
+
+    <h2 class="mb-4">All Conversations</h2>
+
+    {% if not conversation_data %}
+        <div class="alert alert-info">
+            No conversations yet.
+        </div>
+    {% else %}
+        <div class="table-responsive">
+            <table class="table table-hover" style="background-color: var(--claude-bg);">
+                <thead>
+                    <tr style="border-bottom: 2px solid var(--claude-border);">
+                        <th style="padding: 12px;">User</th>
+                        <th style="padding: 12px;">Topics</th>
+                        <th style="padding: 12px;">Total Messages</th>
+                        <th style="padding: 12px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in conversation_data %}
+                    <tr style="border-bottom: 1px solid var(--claude-border);">
+                        <td style="padding: 12px;">
+                            <strong>{{ data.user.email }}</strong><br>
+                            <small class="text-muted">
+                                Joined: {{ data.user.date_joined|date:"M d, Y" }}
+                            </small>
+                        </td>
+                        <td style="padding: 12px;">
+                            {% for topic_key, topic_data in data.topics.items %}
+                                <span class="badge me-1" style="background-color: var(--claude-accent-subtle); color: var(--claude-accent); border: 1px solid var(--claude-accent);">
+                                    {{ topic_data.topic.title }} ({{ topic_data.message_count }} messages)
+                                </span>
+                            {% endfor %}
+                        </td>
+                        <td style="padding: 12px;">{{ data.total_messages }}</td>
+                        <td style="padding: 12px;">
+                            {% for topic_key, topic_data in data.topics.items %}
+                                <a href="{% url 'admin_conversation_detail' data.user.id topic_key %}" 
+                                   class="btn btn-sm claude-btn-outline mb-1"
+                                   style="text-decoration: none;">
+                                    <i class="bi bi-chat-dots"></i> View {{ topic_data.topic.title }}
+                                </a>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
