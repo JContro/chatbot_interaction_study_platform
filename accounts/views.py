@@ -295,7 +295,7 @@ def analysis_view(request, topic_id):
     conversation, _ = Conversation.objects.get_or_create(topic=topic_id)
 
     # Get all messages for this user's conversation
-    messages = ConversationMessage.objects.filter(
+    chat_messages = ConversationMessage.objects.filter(
         user=request.user,
         conversation=conversation
     ).order_by('created_at')
@@ -312,7 +312,7 @@ def analysis_view(request, topic_id):
         'topic_area': topic_data['topic_area'],
         'specific_question': topic_data['specific_question'],
         'conversation': conversation,
-        'messages': messages,
+        'chat_messages': chat_messages,
         'annotations': annotations,
     }
 

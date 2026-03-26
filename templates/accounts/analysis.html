@@ -43,7 +43,7 @@
             </h5>
             
             <div id="chat-history" class="chat-history" style="flex: 1; overflow-y: auto;">
-                {% for message in messages %}
+                {% for message in chat_messages %}
                 <div class="message-wrapper {{ message.role }}" data-message-id="{{ message.id }}">
                     <div class="avatar {% if message.role == 'user' %}avatar-user{% else %}avatar-assistant{% endif %} me-3">
                         <i class="bi {% if message.role == 'user' %}bi-person{% else %}bi-robot{% endif %}"></i>
