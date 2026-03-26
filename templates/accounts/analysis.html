@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+
+{% block title %}Analysis - Chatbot Study{% endblock %}
+
+{% block content %}
+<div class="analysis-container" 
+     data-topic-id="{{ topic_id }}"
+     data-conversation-id="{{ conversation.id }}">
+    <!-- Header -->
+    <nav class="d-flex justify-content-between align-items-center py-3 mb-3" style="border-bottom: 1px solid var(--claude-border);">
+        <div class="d-flex align-items-center gap-3">
+            <div class="claude-logo">
+                <i class="bi bi-clipboard2-check"></i> Chat Analysis
+            </div>
+            {% if topic_area %}
+            <span class="badge" style="background-color: var(--claude-accent-subtle); color: var(--claude-accent); border: 1px solid var(--claude-accent);">
+                <i class="bi bi-tag"></i> {{ topic_area }}
+            </span>
+            {% endif %}
+            {% if specific_question %}
+            <span class="badge bg-secondary">
+                {{ specific_question }}
+            </span>
+            {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <a href="{% url 'chat_topic' topic_id %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-chat-dots"></i> Back to Chat
+            </a>
+            <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
+            <a href="{% url 'logout' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-box-arrow-right"></i> Sign Out
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content: Chat History + Analysis Panel -->
+    <div class="row" style="height: calc(100vh - 180px);">
+        <!-- Left: Chat History (read-only, clickable) -->
+        <div class="col-6" style="display: flex; flex-direction: column; border-right: 1px solid var(--claude-border); padding-right: 20px; overflow-y: auto;">
+            <h5 style="margin-bottom: 16px; color: var(--claude-text);">
+                <i class="bi bi-chat-dots"></i> Conversation
+            </h5>
+            
+            <div id="chat-history" class="chat-history" style="flex: 1; overflow-y: auto;">
+                {% for message in messages %}
+                <div class="message-wrapper {{ message.role }}" data-message-id="{{ message.id }}">
+                    <div class="avatar {% if message.role == 'user' %}avatar-user{% else %}avatar-assistant{% endif %} me-3">
+                        <i class="bi {% if message.role == 'user' %}bi-person{% else %}bi-robot{% endif %}"></i>
+                    </div>
+                    <div class="message {% if message.role == 'user' %}message-user{% else %}message-assistant{% endif %} selectable-text" data-message-id="{{ message.id }}" data-content="{{ message.content|escapejs }}">
+                        <p class="mb-0">{{ message.content|escape }}</p>
+                    </div>
+                </div>
+                {% empty %}
+                <p style="color: var(--claude-text-dim); font-style: italic;">No messages in this conversation yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right: Analysis Panel -->
+        <div class="col-6" style="display: flex; flex-direction: column; padding-left: 20px; overflow-y: auto;">
+            <h5 style="margin-bottom: 16px; color: var(--claude-text);">
+                <i class="bi bi-clipboard2-check"></i> Analysis
+            </h5>
+            
+            <!-- Instruction -->
+            <p style="font-size: 13px; color: var(--claude-text-muted); margin-bottom: 16px;">
+                Select text in the conversation to annotate it. Click on annotated sentences below to edit.
+            </p>
+
+            <!-- Annotation Form (Hidden by default) -->
+            <div id="annotation-form" class="claude-card mb-3" style="display: none; padding: 16px;">
+                <h6 style="margin-bottom: 12px; color: var(--claude-accent);">Annotate Selection</h6>
+                <div id="selected-text-preview" style="font-size: 13px; color: var(--claude-text-muted); margin-bottom: 12px; padding: 8px; background: var(--claude-surface-hover); border-radius: 6px;"></div>
+                
+                <div class="mb-3">
+                    <label style="font-size: 13px; color: var(--claude-text); margin-bottom: 8px;">Classification</label>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="classification-btn btn btn-sm" data-classification="good" style="background: var(--claude-green-subtle); color: var(--claude-green); border: 1px solid var(--claude-green);">
+                            <i class="bi bi-check-circle"></i> Good
+                        </button>
+                        <button type="button" class="classification-btn btn btn-sm" data-classification="bad" style="background: var(--claude-red-subtle); color: var(--claude-red); border: 1px solid var(--claude-red);">
+                            <i class="bi bi-x-circle"></i> Bad
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="annotation-comment" style="font-size: 13px; color: var(--claude-text); margin-bottom: 8px;">Comment</label>
+                    <textarea id="annotation-comment" class="form-control" rows="2" placeholder="Add a comment about this text..."></textarea>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="button" id="save-annotation-btn" class="claude-btn btn-sm">
+                        <i class="bi bi-check"></i> Save
+                    </button>
+                    <button type="button" id="cancel-annotation-btn" class="claude-btn-outline btn-sm">
+                        <i class="bi bi-x"></i> Cancel
+                    </button>
+                    <button type="button" id="delete-annotation-btn" class="btn btn-sm" style="color: var(--claude-red); border: 1px solid var(--claude-red); background: transparent; display: none;">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+
+            <!-- Annotated Sentences List -->
+            <div id="annotations-list">
+                {% if annotations %}
+                    {% for annotation in annotations %}
+                    <div class="annotation-item mb-2" data-annotation-id="{{ annotation.id }}" style="padding: 10px; background: var(--claude-surface-hover); border-radius: 8px; cursor: pointer; border-left: 3px solid {% if annotation.classification == 'good' %}var(--claude-green){% else %}var(--claude-red){% endif %}">
+                        <div style="font-size: 12px; color: var(--claude-text-muted); margin-bottom: 4px;">
+                            <span class="badge" style="background: {% if annotation.classification == 'good' %}var(--claude-green-subtle){% else %}var(--claude-red-subtle){% endif %}; color: {% if annotation.classification == 'good' %}var(--claude-green){% else %}var(--claude-red){% endif %}">
+                                {{ annotation.classification|title|default:'Unclassified' }}
+                            </span>
+                            <span style="margin-left: 8px;">Message #{{ annotation.message.id }}</span>
+                        </div>
+                        <div style="font-size: 13px; color: var(--claude-text);">"{{ annotation.selected_text|escape }}"</div>
+                        {% if annotation.comment %}
+                        <div style="font-size: 12px; color: var(--claude-text-muted); margin-top: 4px; font-style: italic;">{{ annotation.comment|escape }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="font-size: 13px; color: var(--claude-text-dim); font-style: italic;">
+                        No annotations yet. Select text in the conversation to create one.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+
+    // -----------------------------------------------------------------------
+    // State
+    // -----------------------------------------------------------------------
+    const analysisContainer = document.querySelector('.analysis-container');
+    const TOPIC_ID = analysisContainer ? analysisContainer.dataset.topicId : '';
+    const CONVERSATION_ID = analysisContainer ? analysisContainer.dataset.conversationId : '';
+
+    const ANNOTATION_API_URL = "{% url 'annotation_api' %}";
+
+    // -----------------------------------------------------------------------
+    // Elements
+    // -----------------------------------------------------------------------
+    const annotationForm = document.getElementById('annotation-form');
+    const selectedTextPreview = document.getElementById('selected-text-preview');
+    const annotationComment = document.getElementById('annotation-comment');
+    const annotationsList = document.getElementById('annotations-list');
+    const saveAnnotationBtn = document.getElementById('save-annotation-btn');
+    const cancelAnnotationBtn = document.getElementById('cancel-annotation-btn');
+    const deleteAnnotationBtn = document.getElementById('delete-annotation-btn');
+    const classificationBtns = document.querySelectorAll('.classification-btn');
+
+    // -----------------------------------------------------------------------
+    // CSRF helper
+    // -----------------------------------------------------------------------
+    function getCsrfToken() {
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                return decodeURIComponent(cookie.slice(name.length + 1));
+            }
+        }
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
+
+    // -----------------------------------------------------------------------
+    // XSS-safe HTML escape
+    // -----------------------------------------------------------------------
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(text));
+        return div.innerHTML;
+    }
+
+    // -----------------------------------------------------------------------
+    // Text Selection & Annotation Functions
+    // -----------------------------------------------------------------------
+    let currentSelection = null;
+    let currentAnnotation = null;
+    let selectedClassification = null;
+
+    // Attach handlers to all selectable texts
+    document.querySelectorAll('.selectable-text').forEach(el => {
+        el.addEventListener('mouseup', handleTextSelection);
+    });
+
+    function handleTextSelection(e) {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        
+        if (selectedText.length > 0) {
+            const messageEl = e.currentTarget;
+            const messageId = messageEl.dataset.messageId;
+            
+            if (messageId) {
+                currentSelection = {
+                    messageId: messageId,
+                    text: selectedText,
+                    startIndex: 0,
+                    endIndex: selectedText.length
+                };
+                showAnnotationForm(currentSelection, null);
+            }
+        }
+    }
+
+    function showAnnotationForm(selection, existingAnnotation) {
+        currentAnnotation = existingAnnotation;
+        selectedTextPreview.textContent = `"${selection.text}"`;
+        annotationComment.value = existingAnnotation ? (existingAnnotation.comment || '') : '';
+        selectedClassification = existingAnnotation ? existingAnnotation.classification : null;
+        
+        // Update classification button states
+        classificationBtns.forEach(btn => {
+            btn.style.opacity = '0.5';
+            if (btn.dataset.classification === selectedClassification) {
+                btn.style.opacity = '1';
+            }
+        });
+
+        // Show/hide delete button
+        deleteAnnotationBtn.style.display = existingAnnotation ? 'block' : 'none';
+        
+        annotationForm.style.display = 'block';
+    }
+
+    function hideAnnotationForm() {
+        annotationForm.style.display = 'none';
+        currentSelection = null;
+        currentAnnotation = null;
+        selectedClassification = null;
+        annotationComment.value = '';
+        classificationBtns.forEach(btn => btn.style.opacity = '0.5');
+        window.getSelection().removeAllRanges();
+    }
+
+    // Classification button handlers
+    classificationBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedClassification = btn.dataset.classification;
+            classificationBtns.forEach(b => b.style.opacity = '0.5');
+            btn.style.opacity = '1';
+        });
+    });
+
+    saveAnnotationBtn.addEventListener('click', saveAnnotation);
+    cancelAnnotationBtn.addEventListener('click', hideAnnotationForm);
+    deleteAnnotationBtn.addEventListener('click', () => {
+        if (currentAnnotation) {
+            selectedClassification = null;
+            annotationComment.value = '';
+            saveAnnotation();
+        }
+    });
+
+    async function saveAnnotation() {
+        if (!currentSelection) return;
+
+        try {
+            const response = await fetch(ANNOTATION_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    message_id: currentSelection.messageId,
+                    start_index: currentSelection.startIndex,
+                    end_index: currentSelection.endIndex,
+                    selected_text: currentSelection.text,
+                    classification: selectedClassification,
+                    comment: annotationComment.value
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                console.error('Error saving annotation:', data.error);
+            } else {
+                if (data.deleted) {
+                    // Remove from local list and refresh
+                    const item = document.querySelector(`.annotation-item[data-annotation-id="${data.id}"]`);
+                    if (item) item.remove();
+                } else {
+                    // Refresh the page to show updated/new annotation
+                    location.reload();
+                }
+            }
+        } catch (err) {
+            console.error('Error saving annotation:', err);
+        }
+    }
+
+    // Click handlers for annotation items in the list
+    document.querySelectorAll('.annotation-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const annotationId = item.dataset.annotationId;
+            const messageId = item.querySelector('span:last-child').textContent.replace('Message #', '');
+            const text = item.querySelector('div:nth-child(2)').textContent.replace(/^"|"$/g, '');
+            const badge = item.querySelector('.badge');
+            const classification = badge ? badge.textContent.toLowerCase() : null;
+            const commentEl = item.querySelector('div:last-child');
+            const comment = commentEl && commentEl.style.fontStyle === 'italic' ? commentEl.textContent : '';
+
+            currentSelection = {
+                messageId: messageId,
+                text: text,
+                startIndex: 0,
+                endIndex: text.length
+            };
+            currentAnnotation = {
+                id: annotationId,
+                comment: comment
+            };
+            showAnnotationForm(currentSelection, currentAnnotation);
+        });
+    });
+})();
+</script>
+{% endblock %}

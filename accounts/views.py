@@ -274,6 +274,52 @@ def chat_view(request, topic_id=None):
 
 
 @login_required
+def analysis_view(request, topic_id):
+    """
+    Analysis view - displays the conversation with annotation capabilities.
+    Shows chat history on the left and analysis panel on the right.
+    """
+    # Check if user's email is verified before allowing access
+    if not request.user.is_email_verified:
+        messages.warning(
+            request, 'Please verify your email address to access the analysis.')
+        logout(request)
+        return redirect('login')
+
+    # Get the topic data
+    topic_data = get_topic_by_id(int(topic_id))
+    if topic_data is None:
+        return redirect('topic_selection')
+
+    # Get or create the conversation
+    conversation, _ = Conversation.objects.get_or_create(topic=topic_id)
+
+    # Get all messages for this user's conversation
+    messages = ConversationMessage.objects.filter(
+        user=request.user,
+        conversation=conversation
+    ).order_by('created_at')
+
+    # Get existing annotations for this conversation
+    annotations = MessageAnnotation.objects.filter(
+        user=request.user,
+        message__conversation=conversation
+    ).select_related('message').order_by('created_at')
+
+    # Build context with all necessary information
+    analysis_context = {
+        'topic_id': topic_id,
+        'topic_area': topic_data['topic_area'],
+        'specific_question': topic_data['specific_question'],
+        'conversation': conversation,
+        'messages': messages,
+        'annotations': annotations,
+    }
+
+    return render(request, 'accounts/analysis.html', analysis_context)
+
+
+@login_required
 @require_POST
 def chat_api_view(request):
     """
@@ -351,7 +397,7 @@ def chat_api_view(request):
         )
 
         # Save messages to database
-        conversation = Conversation.objects.get(topic=topic)
+        conversation, _ = Conversation.objects.get_or_create(topic=topic_id)
 
         # Save user message
         ConversationMessage.objects.create(
