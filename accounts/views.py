@@ -696,3 +696,181 @@ def admin_conversation_detail_view(request, user_id, topic):
         'conversation': conversation,
         'messages': messages,
     })
+
+
+@login_required
+def admin_analysis_view(request, user_id, topic):
+    """
+    Admin view for analyzing a specific user's conversation with annotation capabilities.
+    Annotations created here are assigned to the admin user doing the analysis.
+    Only staff users can access this view.
+    """
+    if not request.user.is_staff:
+        messages.error(
+            request, 'You do not have permission to access this page.')
+        return redirect('topic_selection')
+
+    user = get_object_or_404(User, id=user_id)
+    conversation = get_object_or_404(Conversation, topic=topic)
+
+    # Get topic data for display
+    topic_data = get_topic_by_id(topic)
+    if topic_data is None:
+        topic_data = {'topic_area': 'Unknown Topic', 'specific_question': ''}
+
+    # Get all messages for this user's conversation
+    chat_messages = ConversationMessage.objects.filter(
+        user=user,
+        conversation=conversation
+    ).order_by('created_at')
+
+    # Get existing annotations for this conversation (by any admin)
+    annotations = MessageAnnotation.objects.filter(
+        message__conversation=conversation
+    ).select_related('message', 'user').order_by('created_at')
+
+    return render(request, 'accounts/analysis.html', {
+        'topic_id': topic,
+        'topic_area': topic_data['topic_area'],
+        'specific_question': topic_data.get('specific_question', ''),
+        'conversation': conversation,
+        'chat_messages': chat_messages,
+        'annotations': annotations,
+        'is_admin_view': True,
+        'admin_target_user': user,
+    })
+
+
+@login_required
+@require_POST
+def llm_suggest_analysis_view(request, user_id, topic):
+    """
+    JSON API endpoint for admin LLM suggest analysis.
+    Uses OpenRouter to generate an analysis of the conversation.
+
+    Request body (JSON):
+        None required
+
+    Success response (200):
+        {"suggestion": "<analysis text>"}
+
+    Error response (4xx / 500):
+        {"error": "<reason>"}
+    """
+    # Check if user is staff
+    if not request.user.is_staff:
+        return JsonResponse(
+            {"error": "Only admin users can access this feature."},
+            status=403,
+        )
+
+    user = get_object_or_404(User, id=user_id)
+    conversation = get_object_or_404(Conversation, topic=topic)
+
+    # Get topic data for context
+    topic_data = get_topic_by_id(topic)
+    if topic_data is None:
+        topic_data = {'topic_area': 'Unknown Topic', 'specific_question': ''}
+
+    # Get all messages for this user's conversation
+    chat_messages = ConversationMessage.objects.filter(
+        user=user,
+        conversation=conversation
+    ).order_by('created_at')
+
+    # Build conversation text for the LLM
+    conversation_text = ""
+    for msg in chat_messages:
+        role = "User" if msg.role == 'user' else "Assistant"
+        conversation_text += f"{role}: {msg.content}\n\n"
+
+    # Build the analysis prompt
+    analysis_prompt = f"""You are analyzing a conversation from a research study about human-AI interaction.
+
+Topic Area: {topic_data.get('topic_area', 'Unknown')}
+Specific Question: {topic_data.get('specific_question', 'Unknown')}
+
+Please analyze this conversation and provide insights on:
+1. The quality and nature of the user's engagement
+2. Any notable patterns in the conversation
+3. Potential issues or concerns (e.g., manipulation, inappropriate content, concerning user behavior)
+4. Overall assessment of the interaction
+
+CONVERSATION:
+{conversation_text}
+
+Provide a thoughtful, objective analysis focusing on research-relevant observations."""
+
+    # Call OpenRouter API
+    try:
+        from django.conf import settings
+        import requests
+
+        api_key = getattr(settings, 'OPENROUTER_API_KEY', '')
+        model = getattr(settings, 'OPENROUTER_MODEL',
+                        'anthropic/claude-sonnet-4-5')
+
+        logger.info(
+            f"LLM Suggest Analysis: user_id={user_id}, topic={topic}, model={model}")
+
+        if not api_key:
+            logger.error(
+                "LLM Suggest Analysis: OPENROUTER_API_KEY is not configured")
+            return JsonResponse(
+                {"error": "OpenRouter API key is not configured. Please set OPENROUTER_API_KEY in environment."},
+                status=500,
+            )
+
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": analysis_prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 2048,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        logger.info(
+            f"LLM Suggest Analysis: Making API call to OpenRouter with model {model}")
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=120,
+        )
+        logger.info(
+            f"LLM Suggest Analysis: Response status={response.status_code}")
+
+        response.raise_for_status()
+        result = response.json()
+
+        if "choices" in result and len(result["choices"]) > 0:
+            suggestion = result["choices"][0]["message"]["content"]
+            return JsonResponse({"suggestion": suggestion})
+        else:
+            return JsonResponse(
+                {"error": "Unexpected API response format."},
+                status=500,
+            )
+
+    except requests.exceptions.RequestException as e:
+        logger.exception("OpenRouter API request failed")
+        return JsonResponse(
+            {"error": f"API request failed: {str(e)}"},
+            status=500,
+        )
+    except Exception as e:
+        logger.exception("Error in llm_suggest_analysis_view")
+        return JsonResponse(
+            {"error": f"Failed to generate analysis: {str(e)}"},
+            status=500,
+        )

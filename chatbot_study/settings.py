@@ -168,3 +168,7 @@ LLM_CONFIG = {
     "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
     "device": os.getenv("LLM_DEVICE", "cpu"),
 }
+
+# OpenRouter Configuration for Admin LLM Suggest Analysis
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")

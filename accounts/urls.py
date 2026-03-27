@@ -28,4 +28,8 @@ urlpatterns = [
          name='admin_conversations'),
     path('study-admin/conversations/<int:user_id>/<str:topic>/',
          views.admin_conversation_detail_view, name='admin_conversation_detail'),
+    path('study-admin/analysis/<int:user_id>/<str:topic>/',
+         views.admin_analysis_view, name='admin_analysis'),
+    path('study-admin/api/llm-suggest-analysis/<int:user_id>/<str:topic>/',
+         views.llm_suggest_analysis_view, name='llm_suggest_analysis'),
 ]

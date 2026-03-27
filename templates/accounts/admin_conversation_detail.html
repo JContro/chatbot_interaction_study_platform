@@ -9,7 +9,7 @@
             <div class="claude-logo">
                 <i class="bi bi-shield-lock"></i> Admin Panel
             </div>
-            <span class="text-muted">/ 
+            <span class="text-muted">/
                 <a href="{% url 'admin_conversations' %}" style="color: var(--claude-text); text-decoration: none;">Conversations</a>
                 / {{ conversation.title }}
             </span>
@@ -22,10 +22,39 @@
     </nav>
 
     <div class="mb-4">
-        <h2>{{ conversation.title }} - {{ user.email }}</h2>
-        <p class="text-muted">
-            Topic: {{ conversation.description|default:"No description" }}
-        </p>
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h2>{{ conversation.title }} - {{ user.email }}</h2>
+                <p class="text-muted">
+                    Topic: {{ conversation.description|default:"No description" }}
+                </p>
+            </div>
+            <button type="button" class="claude-btn" id="llm-suggest-btn" onclick="requestLlmSuggestion()">
+                <i class="bi bi-stars"></i> LLM Suggest Analysis
+            </button>
+        </div>
+    </div>
+
+    <!-- LLM Suggestion Output -->
+    <div id="llm-suggestion-container" class="mb-4" style="display: none;">
+        <div class="card" style="border: 1px solid var(--claude-border); border-radius: 8px;">
+            <div class="card-header" style="background-color: var(--claude-bg); border-bottom: 1px solid var(--claude-border);">
+                <h5 class="mb-0"><i class="bi bi-robot"></i> LLM Analysis Suggestion</h5>
+            </div>
+            <div class="card-body" style="background-color: var(--claude-bg-secondary);">
+                <div id="llm-suggestion-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Generating analysis...</p>
+                </div>
+                <div id="llm-suggestion-content" style="display: none;">
+                    <pre id="llm-suggestion-text" style="white-space: pre-wrap; font-family: inherit; margin-bottom: 0;"></pre>
+                </div>
+                <div id="llm-suggestion-error" class="alert alert-danger mb-0" style="display: none;">
+                </div>
+            </div>
+        </div>
     </div>
 
     {% if not messages %}
@@ -61,4 +90,70 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+function requestLlmSuggestion() {
+    const btn = document.getElementById('llm-suggest-btn');
+    const container = document.getElementById('llm-suggestion-container');
+    const loading = document.getElementById('llm-suggestion-loading');
+    const content = document.getElementById('llm-suggestion-content');
+    const error = document.getElementById('llm-suggestion-error');
+    const text = document.getElementById('llm-suggestion-text');
+    
+    // Disable button and show container
+    btn.disabled = true;
+    container.style.display = 'block';
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    error.style.display = 'none';
+    
+    // Get user_id and topic from the current page context
+    const userId = {{ user.id }};
+    const topic = "{{ conversation.topic }}";
+    
+    fetch(`/study-admin/api/llm-suggest-analysis/${userId}/${topic}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        loading.style.display = 'none';
+        if (data.error) {
+            error.textContent = data.error;
+            error.style.display = 'block';
+        } else if (data.suggestion) {
+            text.textContent = data.suggestion;
+            content.style.display = 'block';
+        }
+    })
+    .catch(err => {
+        loading.style.display = 'none';
+        error.textContent = 'An error occurred while generating the analysis. Please try again.';
+        error.style.display = 'block';
+        console.error('LLM Suggest Error:', err);
+    })
+    .finally(() => {
+        btn.disabled = false;
+    });
+}
+
+function getCsrfToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
 {% endblock %}
