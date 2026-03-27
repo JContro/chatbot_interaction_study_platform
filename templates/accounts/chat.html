@@ -67,12 +67,6 @@
             </div>
             <div class="message-assistant">
                 <p class="mb-2">Hello! I'm here to discuss <strong>{{ specific_question }}</strong> with you.</p>
-                {% if primary_exile %}
-                <p class="mb-0" style="font-size: 13px; color: var(--claude-text-light);">
-                    <i class="bi bi-lightbulb"></i> This topic relates to the exile archetype: <strong>{{ primary_exile }}</strong>
-                    ({{ intensity }} intensity {{ intensity_symbol }})
-                </p>
-                {% endif %}
             </div>
         </div>
     </div>

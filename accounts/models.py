@@ -1,6 +1,95 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 import uuid
+import json
+
+
+class IFSPart(models.Model):
+    """
+    Model representing an IFS (Internal Family Systems) part in the taxonomy.
+    Used for classifying conversation content based on IFS therapeutic concepts.
+    """
+    CATEGORY_CHOICES = [
+        ('protector', 'Protector'),
+        ('exile', 'Exile'),
+        ('healthy_capacity', 'Healthy Capacity'),
+        ('relational_session', 'Relational/Session Process'),
+        ('case_example', 'Case Example'),
+    ]
+
+    SUBCATEGORY_CHOICES = [
+        ('manager', 'Manager'),
+        ('manager_inner_critic', 'Manager - Inner Critic'),
+        ('firefighter', 'Firefighter'),
+        ('exile', 'Exile'),
+        ('healthy_capacity', 'Healthy Capacity'),
+        ('relational_session', 'Relational/Session Process'),
+        ('case_example', 'Case Example'),
+    ]
+
+    # Core identification
+    part_id = models.CharField(
+        max_length=100, unique=True,
+        help_text="Unique identifier for the part (e.g., 'perfectionist', 'frightened_child')")
+    name = models.CharField(max_length=200)
+
+    # Categorization
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
+    subcategory = models.CharField(max_length=30, choices=SUBCATEGORY_CHOICES, blank=True, null=True)
+
+    # Core description and intent
+    description = models.TextField()
+    positive_intent = models.TextField(blank=True, null=True)
+
+    # JSON fields for list data
+    common_behaviors = models.JSONField(default=list, blank=True)
+    often_polarized_with = models.JSONField(default=list, blank=True)
+    sources = models.JSONField(default=list, blank=True)
+
+    # Exile-specific fields
+    burden = models.TextField(blank=True, null=True)
+    typical_origins = models.TextField(blank=True, null=True)
+    common_expressions = models.TextField(blank=True, null=True)
+    exile_protected = models.TextField(blank=True, null=True)
+
+    # Healthy capacity fields
+    qualities = models.JSONField(default=list, blank=True)
+    healthy_version_of = models.CharField(max_length=200, blank=True, null=True)
+    transforms = models.CharField(max_length=200, blank=True, null=True)
+
+    # Relational/session parts
+    role_in_sessions = models.TextField(blank=True, null=True)
+
+    # Case example parts
+    client = models.CharField(max_length=200, blank=True, null=True)
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['category', 'subcategory', 'name']
+        verbose_name = 'IFS Part'
+        verbose_name_plural = 'IFS Parts'
+
+    def __str__(self):
+        return f"{self.name} ({self.part_id})"
+
+
+class IFSMeta(models.Model):
+    """
+    Model for storing IFS taxonomy metadata (descriptions and notes about the Self).
+    """
+    key = models.CharField(max_length=100, unique=True)
+    description = models.TextField()
+    note_on_self = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'IFS Meta'
+        verbose_name_plural = 'IFS Meta'
+
+    def __str__(self):
+        return f"IFS Meta: {self.key}"
 
 
 class Conversation(models.Model):

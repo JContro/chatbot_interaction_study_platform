@@ -207,8 +207,6 @@ class HuggingFaceLLM(BaseLLM):
         system_parts = [
             f"You are having a conversation about: {topic_data.get('specific_question', 'Unknown topic')}",
             f"Topic Area: {topic_data.get('topic_area', 'General')}",
-            f"Primary Exile Archetype: {topic_data.get('primary_exile', 'Not specified')}",
-            f"Intensity: {topic_data.get('intensity', 'medium')}",
             "",
             f"Your assigned stance is: {assigned_stance.upper()}",
             "",

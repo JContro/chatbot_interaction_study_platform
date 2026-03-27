@@ -1,6 +1,6 @@
 """
 Conversation topics data for the chatbot study platform.
-Contains topic areas, specific questions, primary exiles, intensity levels, and stance data.
+Contains topic areas and specific questions for conversation discussions.
 """
 
 CONVERSATION_TOPICS = [
@@ -8,9 +8,6 @@ CONVERSATION_TOPICS = [
         "id": 1,
         "topic_area": "Worker Rights",
         "specific_question": "Employer monitoring of remote workers",
-        "primary_exile": "Powerless",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "Employers have the right to ensure productivity and protect company assets; monitoring ensures accountability in a remote environment.",
@@ -23,9 +20,6 @@ CONVERSATION_TOPICS = [
         "id": 2,
         "topic_area": "Worker Rights",
         "specific_question": "Living wage for all jobs",
-        "primary_exile": "Shame-Filled",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "A baseline standard of living supports family stability and reduces dependency on government welfare programs.",
@@ -38,9 +32,6 @@ CONVERSATION_TOPICS = [
         "id": 3,
         "topic_area": "Worker Rights",
         "specific_question": "Salary transparency at work",
-        "primary_exile": "Invisible",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "Transparency can reduce discrimination and ensure merit-based pay is verifiable, aligning with fairness values.",
@@ -53,9 +44,6 @@ CONVERSATION_TOPICS = [
         "id": 4,
         "topic_area": "Social Dynamics",
         "specific_question": "Obligation to stay close to family",
-        "primary_exile": "Guilty",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Family is the foundational unit of society; geographic and relational closeness strengthens community bonds and intergenerational support.",
@@ -68,9 +56,6 @@ CONVERSATION_TOPICS = [
         "id": 5,
         "topic_area": "Social Dynamics",
         "specific_question": "Is loneliness personal or societal?",
-        "primary_exile": "Invisible",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "Strong communities, churches, and family structures — not government programs — are the true antidotes to loneliness.",
@@ -83,9 +68,6 @@ CONVERSATION_TOPICS = [
         "id": 6,
         "topic_area": "Social Dynamics",
         "specific_question": "Cutting off a family member",
-        "primary_exile": "Abandoned",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "In cases of genuine harm or abuse, protecting oneself and one's own family unit is a responsible and moral choice.",
@@ -98,9 +80,6 @@ CONVERSATION_TOPICS = [
         "id": 7,
         "topic_area": "Immigration",
         "specific_question": "Should immigrants assimilate?",
-        "primary_exile": "Shame-Filled",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Learning the language, embracing civic values, and integrating into society strengthens national cohesion and immigrant success.",
@@ -113,9 +92,6 @@ CONVERSATION_TOPICS = [
         "id": 8,
         "topic_area": "Immigration",
         "specific_question": "Birthplace determining opportunity",
-        "primary_exile": "Powerless",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "National sovereignty means countries have the right to prioritize their own citizens; birthplace-based differences are a natural outcome of this.",
@@ -128,9 +104,6 @@ CONVERSATION_TOPICS = [
         "id": 9,
         "topic_area": "Immigration",
         "specific_question": "Undocumented access to services",
-        "primary_exile": "Invisible",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Basic humanitarian services like emergency medical care are reasonable, but full access incentivizes illegal entry and is unfair to legal immigrants.",
@@ -143,9 +116,6 @@ CONVERSATION_TOPICS = [
         "id": 10,
         "topic_area": "Lifestyle",
         "specific_question": "Obligation to be healthy",
-        "primary_exile": "Shame-Filled",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "Personal responsibility for one's health is a core value; individuals owe it to their families and communities to take care of themselves.",
@@ -158,9 +128,6 @@ CONVERSATION_TOPICS = [
         "id": 11,
         "topic_area": "Lifestyle",
         "specific_question": "Child-free by choice — selfish?",
-        "primary_exile": "Guilty",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Family formation and raising children are central to a flourishing society; choosing not to participate has cultural and demographic consequences.",
@@ -173,9 +140,6 @@ CONVERSATION_TOPICS = [
         "id": 12,
         "topic_area": "Lifestyle",
         "specific_question": "Normalizing therapy in schools",
-        "primary_exile": "Invisible",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "Supporting students' mental health can improve academic outcomes and reduce societal costs long-term.",
@@ -188,9 +152,6 @@ CONVERSATION_TOPICS = [
         "id": 13,
         "topic_area": "Institutions",
         "specific_question": "Trusting healthcare",
-        "primary_exile": "Powerless",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Medical professionals generally deserve respect and trust, though patients should remain informed and advocate for themselves.",
@@ -203,9 +164,6 @@ CONVERSATION_TOPICS = [
         "id": 14,
         "topic_area": "Institutions",
         "specific_question": "Social services power",
-        "primary_exile": "Frightened",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Some social services are necessary to protect the vulnerable, particularly children, when families fail.",
@@ -218,9 +176,6 @@ CONVERSATION_TOPICS = [
         "id": 15,
         "topic_area": "Institutions",
         "specific_question": "Justice system equality",
-        "primary_exile": "Invisible",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "The justice system, while imperfect, is one of the most important institutions for maintaining order and protecting individual rights.",
@@ -233,9 +188,6 @@ CONVERSATION_TOPICS = [
         "id": 16,
         "topic_area": "Fairness",
         "specific_question": "Do people get what they deserve?",
-        "primary_exile": "Powerless/Guilty",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "In a free society, hard work, good character, and personal responsibility generally lead to better outcomes — merit matters.",
@@ -248,9 +200,6 @@ CONVERSATION_TOPICS = [
         "id": 17,
         "topic_area": "Fairness",
         "specific_question": "Bootstrapping narrative",
-        "primary_exile": "Shame-Filled",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "The bootstrapping ideal inspires perseverance, self-reliance, and the belief that individuals have agency over their circumstances.",
@@ -263,9 +212,6 @@ CONVERSATION_TOPICS = [
         "id": 18,
         "topic_area": "Identity",
         "specific_question": "Reinventing yourself as an adult",
-        "primary_exile": "Powerless",
-        "intensity": "low",
-        "intensity_symbol": "🟢",
         "stances": {
             "conservative": {
                 "pro": "Personal growth, redemption, and transformation are core values — people should not be permanently defined by their past.",
@@ -278,9 +224,6 @@ CONVERSATION_TOPICS = [
         "id": 19,
         "topic_area": "Identity",
         "specific_question": "Defined by worst moments",
-        "primary_exile": "Guilty/Shame",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Redemption and forgiveness are foundational values; no one should be permanently defined by their worst moments if they have shown genuine change.",
@@ -293,9 +236,6 @@ CONVERSATION_TOPICS = [
         "id": 20,
         "topic_area": "Identity",
         "specific_question": "Changing values from upbringing",
-        "primary_exile": "Abandoned",
-        "intensity": "medium",
-        "intensity_symbol": "🟡",
         "stances": {
             "conservative": {
                 "pro": "Careful, reasoned re-examination of inherited values is healthy and part of mature faith and character development.",
