@@ -18,7 +18,7 @@ Configuration (in Django settings.py)
         "provider": "accounts.llm.huggingface.HuggingFaceLLM",
 
         # Passed as model_name to the provider constructor.
-        "model_name": "HuggingFaceTB/SmolLM2-135M-Instruct",
+        "model_name": "Qwen/Qwen3-14B",
 
         # Any additional constructor kwargs for the chosen provider:
         "device": "cpu",
@@ -83,7 +83,7 @@ def get_llm() -> BaseLLM:
         )
         model_name: str = config.get(
             "model_name",
-            "HuggingFaceTB/SmolLM2-135M-Instruct",
+            "en/Qwen3-14QwB",
         )
 
         # Everything else in LLM_CONFIG is forwarded to the constructor.

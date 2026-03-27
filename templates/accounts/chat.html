@@ -51,9 +51,9 @@
             <span class="badge" style="background-color: var(--claude-accent); color: #18191b;">{{ assigned_stance|title }}</span>
         </div>
         <div class="stance-positions" style="font-size: 13px; color: var(--claude-text-light);">
-            <div class="mb-1"><strong>Pro:</strong> {{ stance_pro|truncatechars:150 }}</div>
-            <div class="mb-1"><strong>Con:</strong> {{ stance_con|truncatechars:150 }}</div>
-            <div><strong>Neutral:</strong> {{ stance_neutral|truncatechars:150 }}</div>
+            <div class="mb-1"><strong>Pro:</strong> {{ stance_pro }}</div>
+            <div class="mb-1"><strong>Con:</strong> {{ stance_con }}</div>
+            <div><strong>Neutral:</strong> {{ stance_neutral }}</div>
         </div>
     </div>
     {% endif %}
@@ -256,6 +256,14 @@
     }
 
     // -----------------------------------------------------------------------
+    // Remove <think>...</think> blocks from LLM reasoning content
+    // -----------------------------------------------------------------------
+    function stripThinkBlocks(text) {
+        // Matches <think>...</think> blocks (case-insensitive, multiline)
+        return text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    }
+
+    // -----------------------------------------------------------------------
     // UI helpers
     // -----------------------------------------------------------------------
     function appendMessage(content, sender) {
@@ -266,9 +274,10 @@
 
         const wrapper = document.createElement('div');
         wrapper.className = wrapperClass;
+        const displayContent = sender === 'assistant' ? stripThinkBlocks(content) : content;
         wrapper.innerHTML = `
             <div class="${avatarClass} me-3"><i class="bi ${avatarIcon}"></i></div>
-            <div class="${messageClass}"><p class="mb-0">${escapeHtml(content)}</p></div>
+            <div class="${messageClass}"><p class="mb-0">${escapeHtml(displayContent)}</p></div>
         `;
         chatMessages.appendChild(wrapper);
         chatMessages.scrollTop = chatMessages.scrollHeight;
