@@ -1,4 +1,4 @@
-FROM scitrera/dgx-spark-pytorch-runtime:2.10.0-v2-cu131
+FROM scitrera/dgx-spark-vllm:0.13.0-t4
 
 # Install ffmpeg for audio transcription (Whisper)
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*

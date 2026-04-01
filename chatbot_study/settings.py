@@ -172,9 +172,10 @@ LOGOUT_REDIRECT_URL = 'login'
 # Device options: 'cpu' | 'cuda' | 'mps' | 'auto'
 # ---------------------------------------------------------------------------
 LLM_CONFIG = {
-    "provider": "accounts.llm.huggingface.HuggingFaceLLM",
+    "provider": "accounts.llm.vllm.VLLM",
     "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
-    "device": os.getenv("LLM_DEVICE", "cuda"),
+    "tensor_parallel_size": int(os.getenv("LLM_TENSOR_PARALLEL_SIZE", "1")),
+    "gpu_memory_utilization": float(os.getenv("LLM_GPU_MEMORY_UTILIZATION", "0.9")),
 }
 
 # OpenRouter Configuration for Admin LLM Suggest Analysis
