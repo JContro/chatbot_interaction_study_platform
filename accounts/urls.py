@@ -10,6 +10,7 @@ urlpatterns = [
     path('chat/', views.chat_view, name='chat'),
     path('chat/<int:topic_id>/', views.chat_view, name='chat_topic'),
     path('chat/api/message/', views.chat_api_view, name='chat_api'),
+    path('chat/api/message/stream/', views.chat_api_stream_view, name='chat_api_stream'),
     path('chat/api/transcribe/', views.transcribe_audio_view,
          name='transcribe_audio'),
     path('chat/api/annotation/', views.annotation_api_view,

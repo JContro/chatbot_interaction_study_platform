@@ -425,6 +425,138 @@ def chat_api_view(request):
 
 @login_required
 @require_POST
+def chat_api_stream_view(request):
+    """
+    Streaming JSON API endpoint: receive a user message + conversation history,
+    stream the LLM's reply using Server-Sent Events.
+
+    Request body (JSON) - same as chat_api_view:
+        {
+            "message": "<user text>",
+            "topic_id": "<topic ID (1-20)>",
+            "assigned_stance": "<stance type (e.g., conservative)>",
+            "history": [
+                {"role": "user",      "content": "..."},
+                {"role": "assistant", "content": "..."}
+            ]
+        }
+
+    Response: Server-Sent Events stream where each event is:
+        data: {"token": "<token text>"}
+        data: {"done": true, "response": "<full response>"}
+
+    Error response (4xx / 500):
+        data: {"error": "<reason>"}
+    """
+    # -- parse request body --------------------------------------------------
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return StreamingHttpResponse(
+            iter([json.dumps({"error": "Invalid JSON body."})]),
+            status=400,
+            content_type="application/json"
+        )
+
+    user_message = body.get("message", "").strip()
+    if not user_message:
+        return StreamingHttpResponse(
+            iter([json.dumps({"error": "Message cannot be empty."})]),
+            status=400,
+            content_type="application/json"
+        )
+
+    topic_id = body.get("topic_id", "").strip()
+    if not topic_id:
+        return StreamingHttpResponse(
+            iter([json.dumps({"error": "Topic ID is required."})]),
+            status=400,
+            content_type="application/json"
+        )
+
+    # Validate topic_id exists
+    topic_data = get_topic_by_id(int(topic_id))
+    if topic_data is None:
+        return StreamingHttpResponse(
+            iter([json.dumps({"error": "Invalid topic ID."})]),
+            status=400,
+            content_type="application/json"
+        )
+
+    assigned_stance = body.get("assigned_stance", "").strip()
+    if not assigned_stance or assigned_stance not in topic_data['stances']:
+        return StreamingHttpResponse(
+            iter([json.dumps({"error": "Invalid or missing stance."})]),
+            status=400,
+            content_type="application/json"
+        )
+
+    raw_history = body.get("history", [])
+
+    # -- generator function for streaming ------------------------------------
+    def generate():
+        try:
+            from .llm.registry import get_llm
+            from .llm.base import ConversationHistory
+
+            # Rebuild server-side ConversationHistory
+            history = ConversationHistory()
+            for entry in raw_history:
+                role = entry.get("role", "user")
+                content = entry.get("content", "")
+                if role and content:
+                    history.add_message(role, content)
+
+            history.add_user_message(user_message)
+
+            llm = get_llm()
+            full_response = ""
+
+            # Save messages to database
+            conversation, _ = Conversation.objects.get_or_create(topic=topic_id)
+
+            # Save user message
+            ConversationMessage.objects.create(
+                user=request.user,
+                conversation=conversation,
+                role='user',
+                content=user_message
+            )
+
+            # Stream tokens as they come
+            for token in llm.generate_stream(
+                prompt=user_message,
+                conversation_history=history,
+                topic_data=topic_data,
+                assigned_stance=assigned_stance,
+            ):
+                full_response += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
+
+            # Save assistant response
+            ConversationMessage.objects.create(
+                user=request.user,
+                conversation=conversation,
+                role='assistant',
+                content=full_response
+            )
+
+            # Send completion event
+            yield f"data: {json.dumps({'done': True, 'response': full_response})}\n\n"
+
+        except Exception:
+            logger.exception("LLM streaming failed for user '%s'",
+                             request.user.email)
+            yield json.dumps({"error": "The model encountered an error generating a response."})
+
+    return StreamingHttpResponse(
+        generate(),
+        content_type="text/event-stream"
+    )
+
+
+@login_required
+@require_POST
 def transcribe_audio_view(request):
     """
     JSON API endpoint: receive audio data, transcribe it using Whisper,

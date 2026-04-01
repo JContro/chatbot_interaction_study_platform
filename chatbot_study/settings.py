@@ -174,7 +174,7 @@ LOGOUT_REDIRECT_URL = 'login'
 LLM_CONFIG = {
     "provider": "accounts.llm.huggingface.HuggingFaceLLM",
     "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
-    "device": os.getenv("LLM_DEVICE", "cpu"),
+    "device": os.getenv("LLM_DEVICE", "cuda"),
 }
 
 # OpenRouter Configuration for Admin LLM Suggest Analysis

@@ -12,7 +12,7 @@ packages unless this backend is actually configured.
 
 import gc
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 from .base import BaseLLM, ConversationHistory, GenerationParams
 
@@ -186,6 +186,102 @@ class HuggingFaceLLM(BaseLLM):
         response = self._tokenizer.decode(
             new_ids, skip_special_tokens=True).strip()
         return response
+
+    def generate_stream(
+        self,
+        prompt: str,
+        conversation_history: Optional[ConversationHistory] = None,
+        topic_data: Optional[Dict[str, Any]] = None,
+        assigned_stance: Optional[str] = None,
+        **kwargs,
+    ) -> Iterator[str]:
+        """
+        Generate a streaming reply to *prompt*, yielding tokens as they are generated.
+
+        When topic_data and assigned_stance are provided, the chatbot will be
+        instructed to adopt a specific perspective on the topic.
+        """
+        if not self._initialized:
+            self.initialize()
+
+        import torch
+        from transformers import TextIteratorStreamer
+        from threading import Thread
+
+        # ---- resolve generation parameters --------------------------------
+        gen_param_keys = {
+            "temperature", "max_new_tokens", "top_p", "top_k",
+            "repetition_penalty", "do_sample",
+        }
+        gen_kwargs = {k: v for k, v in kwargs.items() if k in gen_param_keys}
+        params = GenerationParams(**gen_kwargs)
+
+        # ---- build system prompt with topic and stance info ---------------
+        system_prompt = self._build_system_prompt(topic_data, assigned_stance)
+
+        # ---- build the message list for the model -------------------------
+        if conversation_history is not None:
+            messages = conversation_history.get_messages()
+            if system_prompt:
+                messages = [
+                    {"role": "system", "content": system_prompt}] + messages
+        else:
+            messages = [{"role": "user", "content": prompt}]
+            if system_prompt:
+                messages = [
+                    {"role": "system", "content": system_prompt}] + messages
+
+        # ---- format the prompt --------------------------------------------
+        if getattr(self._tokenizer, "chat_template", None):
+            input_text = self._tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        else:
+            input_text = ""
+            for msg in messages:
+                role = msg["role"].capitalize()
+                input_text += f"{role}: {msg['content']}\n"
+            input_text += "Assistant:"
+
+        # ---- tokenise ----------------------------------------------------
+        model_device = next(self._model.parameters()).device
+        inputs = self._tokenizer(
+            input_text, return_tensors="pt").to(model_device)
+
+        # ---- streaming generation using TextIteratorStreamer ---------------
+        streamer = TextIteratorStreamer(
+            self._tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True
+        )
+
+        generation_kwargs = {
+            **inputs,
+            "max_new_tokens": params.max_new_tokens,
+            "temperature": params.temperature,
+            "top_p": params.top_p,
+            "top_k": params.top_k,
+            "repetition_penalty": params.repetition_penalty,
+            "do_sample": params.do_sample,
+            "pad_token_id": self._tokenizer.eos_token_id,
+            "streamer": streamer,
+        }
+
+        # Run generation in a separate thread
+        with torch.no_grad():
+            thread = Thread(
+                target=self._model.generate,
+                kwargs=generation_kwargs
+            )
+            thread.start()
+
+            # Yield tokens as they come from the streamer
+            for text in streamer:
+                yield text
+
+            thread.join()
 
     def _build_system_prompt(
         self,

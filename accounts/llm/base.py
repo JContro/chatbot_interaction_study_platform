@@ -6,7 +6,7 @@ making the chat functionality model-agnostic and provider-agnostic.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import Iterator, List, Dict, Any, Optional
 
 
 class Message:
@@ -120,6 +120,30 @@ class BaseLLM(ABC):
 
         Returns:
             The generated response as a string
+        """
+        pass
+
+    @abstractmethod
+    def generate_stream(
+        self,
+        prompt: str,
+        conversation_history: Optional[ConversationHistory] = None,
+        topic_data: Optional[Dict[str, Any]] = None,
+        assigned_stance: Optional[str] = None,
+        **kwargs
+    ) -> Iterator[str]:
+        """
+        Generate a streaming response to the given prompt.
+
+        Args:
+            prompt: The user's input prompt
+            conversation_history: Optional conversation history for context
+            topic_data: Optional topic data dictionary containing topic info
+            assigned_stance: Optional stance type (e.g., 'conservative')
+            **kwargs: Additional generation parameters (temperature, max_tokens, etc.)
+
+        Yields:
+            Chunks of the generated response as strings
         """
         pass
 

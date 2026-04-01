@@ -2,6 +2,10 @@ Django>=5.0,<6.0
 python-dotenv>=1.0.0
 django-crispy-forms>=2.0
 crispy-bootstrap4>=2.0
+pandas
+datasets
+accelerate
+tqdm
 
 # ML/AI Dependencies
 torch>=2.0.0

@@ -248,12 +248,15 @@
     });
 
     function handleTextSelection(e) {
+        console.log('handleTextSelection called', e);
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
+        console.log('Selected text:', selectedText);
         
         if (selectedText.length > 0) {
             const messageEl = e.currentTarget;
             const messageId = messageEl.dataset.messageId;
+            console.log('Message ID:', messageId);
             
             if (messageId) {
                 currentSelection = {
@@ -262,6 +265,7 @@
                     startIndex: 0,
                     endIndex: selectedText.length
                 };
+                console.log('Calling showAnnotationForm');
                 showAnnotationForm(currentSelection, null);
             }
         }
@@ -401,6 +405,7 @@ function requestLlmSuggestion() {
     loading.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 mb-0 text-muted" style="font-size: 13px;">Making API call to OpenRouter...</p>';
     
     // Get user_id and topic from page data
+    {% if is_admin_view %}
     const userId = {{ admin_target_user.id }};
     const topic = "{{ topic_id }}";
     
@@ -442,6 +447,7 @@ function requestLlmSuggestion() {
     .finally(() => {
         if (btn) btn.disabled = false;
     });
+    {% endif %}
 }
 
 // Helper to get CSRF token from cookie (same logic as getCsrfToken in IIFE)
