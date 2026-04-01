@@ -1,7 +1,6 @@
 import logging
 import os
 import sys
-import threading
 
 from django.apps import AppConfig
 
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 def _preload_llm() -> None:
     """
     Pre-warm the LLM so the first HTTP request is not penalised by model
-    loading time.  Runs in a daemon background thread.
+    loading time.  Runs synchronously to ensure model is loaded before server starts.
     """
     try:
         logger.info("LLM pre-load: starting …")
@@ -58,6 +57,5 @@ class AccountsConfig(AppConfig):
         if "runserver" in sys.argv and os.environ.get("RUN_MAIN") != "true":
             return
 
-        t = threading.Thread(target=_preload_llm,
-                             name="llm-preload", daemon=True)
-        t.start()
+        # Load LLM synchronously at startup to avoid first-request latency
+        _preload_llm()
