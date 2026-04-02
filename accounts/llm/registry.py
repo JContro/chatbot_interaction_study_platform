@@ -18,7 +18,7 @@ Configuration (in Django settings.py)
         "provider": "accounts.llm.huggingface.HuggingFaceLLM",
 
         # Passed as model_name to the provider constructor.
-        "model_name": "Qwen/Qwen3-14B",
+        "model_name": "Qwen/Qwen3.5-35B-A3B",
 
         # Any additional constructor kwargs for the chosen provider:
         "device": "cpu",

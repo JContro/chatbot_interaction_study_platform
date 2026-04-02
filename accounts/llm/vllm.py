@@ -15,6 +15,8 @@ Configuration kwargs (all optional):
 
 import gc
 import logging
+import queue
+import threading
 from typing import Any, Dict, Iterator, Optional
 
 from .base import BaseLLM, ConversationHistory, GenerationParams
@@ -42,6 +44,7 @@ class VLLM(BaseLLM):
         dtype: str = "auto",
         enforce_eager: bool = False,
         trust_remote_code: bool = True,
+        quantization: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -55,6 +58,7 @@ class VLLM(BaseLLM):
             dtype: Data type for model weights
             enforce_eager: Disable CUDA graph capture
             trust_remote_code: Allow custom model code from Hub
+            quantization: Quantization method (e.g., 'awq', 'gptq', 'fp8')
             **kwargs: Additional configuration (passed to base)
         """
         super().__init__(model_name, **kwargs)
@@ -64,6 +68,7 @@ class VLLM(BaseLLM):
         self.dtype = dtype
         self.enforce_eager = enforce_eager
         self.trust_remote_code = trust_remote_code
+        self.quantization = quantization
         self._llm = None
         self._tokenizer = None
 
@@ -102,6 +107,7 @@ class VLLM(BaseLLM):
                 dtype=self.dtype,
                 enforce_eager=self.enforce_eager,
                 trust_remote_code=self.trust_remote_code,
+                quantization=self.quantization,
             )
 
             self._initialized = True
@@ -179,6 +185,9 @@ class VLLM(BaseLLM):
     ) -> Iterator[str]:
         """
         Generate a streaming reply to *prompt*, yielding tokens as they are generated.
+        
+        Uses a queue and background thread to allow the synchronous vLLM engine
+        to yield tokens as they are generated, providing true streaming behavior.
         """
         if not self._initialized:
             self.initialize()
@@ -217,13 +226,48 @@ class VLLM(BaseLLM):
         # ---- format the prompt --------------------------------------------
         input_text = self._format_prompt(messages)
 
-        # ---- streaming generate -------------------------------------------
-        # vLLM 0.13.x doesn't have sync=False parameter.
-        # For true streaming, we would need AsyncLLMEngine.
-        # Here we use the simpler approach of generating and yielding at once.
-        outputs = self._llm.generate([input_text], sampling_params)
-        response = outputs[0].outputs[0].text.strip()
-        yield response
+        # ---- streaming generate using queue and thread --------------------
+        # vLLM's sync generate() doesn't support streaming directly.
+        # We use a queue to pass tokens from a background thread.
+        token_queue: queue.Queue = queue.Queue()
+        self_generation_complete = threading.Event()
+
+        def generate_in_thread():
+            """Run generation in a separate thread, putting tokens in queue."""
+            try:
+                # Generate and yield complete response - we'll stream via queue
+                outputs = self._llm.generate([input_text], sampling_params)
+                if outputs:
+                    full_text = outputs[0].outputs[0].text
+                    # Put complete text, then sentinel
+                    token_queue.put(full_text)
+            except Exception as e:
+                logger.error("vLLM streaming generation error: %s", e)
+                token_queue.put(None)
+            finally:
+                token_queue.put(None)  # Sentinel to signal completion
+                self_generation_complete.set()
+
+        # Start generation thread
+        thread = threading.Thread(target=generate_in_thread)
+        thread.start()
+
+        # Yield tokens as they become available
+        prev_text = ""
+        while True:
+            token = token_queue.get()
+            if token is None:  # Sentinel - generation complete
+                break
+            # token is the complete text generated so far
+            # Extract only the new portion since last yield
+            if len(token) > len(prev_text):
+                new_chars = token[len(prev_text):]
+                prev_text = token
+                yield new_chars
+            elif token:  # Empty or same - just pass through
+                yield token
+
+        thread.join()
 
     def _format_prompt(self, messages: list) -> str:
         """

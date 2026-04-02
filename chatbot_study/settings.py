@@ -175,7 +175,8 @@ LLM_CONFIG = {
     "provider": "accounts.llm.vllm.VLLM",
     "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
     "tensor_parallel_size": int(os.getenv("LLM_TENSOR_PARALLEL_SIZE", "1")),
-    "gpu_memory_utilization": float(os.getenv("LLM_GPU_MEMORY_UTILIZATION", "0.9")),
+    "gpu_memory_utilization": float(os.getenv("LLM_GPU_MEMORY_UTILIZATION", "0.85")),
+    "max_model_len": int(os.getenv("LLM_MAX_MODEL_LEN", "8192")),
 }
 
 # OpenRouter Configuration for Admin LLM Suggest Analysis

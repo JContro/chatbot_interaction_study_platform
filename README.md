@@ -18,11 +18,12 @@ docker build -t general_purpose_pork .
 ### Running the Container
 
 ```bash
-docker run -p 8086:8086 \
+
+docker run -d \
+  --gpus all \
+  -p 8086:8086 \
   -v $(pwd):/workspace \
-  -e SECRET_KEY='your-secret-key-here' \
-  -e DEBUG='True' \
-  -e ALLOWED_HOSTS='localhost,127.0.0.1' \
+  --name chatbot_webapp \
   general_purpose_pork
 ```
 
