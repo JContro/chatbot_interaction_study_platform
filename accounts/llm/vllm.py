@@ -45,6 +45,8 @@ class VLLM(BaseLLM):
         enforce_eager: bool = False,
         trust_remote_code: bool = True,
         quantization: Optional[str] = None,
+        enable_chunked_prefill: bool = False,
+        max_num_seqs: int = 256,
         **kwargs,
     ):
         """
@@ -56,9 +58,11 @@ class VLLM(BaseLLM):
             gpu_memory_utilization: Fraction of GPU memory to use (0.0-1.0)
             max_model_len: Maximum context length (None = auto from model)
             dtype: Data type for model weights
-            enforce_eager: Disable CUDA graph capture
+            enforce_eager: Disable CUDA graph capture (avoids slow autotuning)
             trust_remote_code: Allow custom model code from Hub
             quantization: Quantization method (e.g., 'awq', 'gptq', 'fp8')
+            enable_chunked_prefill: Enable chunked prefill for better latency
+            max_num_seqs: Maximum number of sequences to process in parallel
             **kwargs: Additional configuration (passed to base)
         """
         super().__init__(model_name, **kwargs)
@@ -69,6 +73,8 @@ class VLLM(BaseLLM):
         self.enforce_eager = enforce_eager
         self.trust_remote_code = trust_remote_code
         self.quantization = quantization
+        self.enable_chunked_prefill = enable_chunked_prefill
+        self.max_num_seqs = max_num_seqs
         self._llm = None
         self._tokenizer = None
 
@@ -108,6 +114,8 @@ class VLLM(BaseLLM):
                 enforce_eager=self.enforce_eager,
                 trust_remote_code=self.trust_remote_code,
                 quantization=self.quantization,
+                enable_chunked_prefill=self.enable_chunked_prefill,
+                max_num_seqs=self.max_num_seqs,
             )
 
             self._initialized = True
@@ -273,12 +281,24 @@ class VLLM(BaseLLM):
         """
         Format messages into a prompt string using the tokenizer's chat template,
         or fall back to a simple concatenation.
+        
+        For Qwen3 series models, explicitly disables the extended thinking/reasoning
+        capability to get direct responses.
         """
         if self._tokenizer and getattr(self._tokenizer, "chat_template", None):
+            # Check if this is a Qwen3 model (which has thinking capability)
+            is_qwen3 = "Qwen3" in self.model_name or "qwen3" in self.model_name.lower()
+            
+            extra_kwargs = {}
+            if is_qwen3:
+                # Disable extended thinking to get direct responses
+                extra_kwargs["enable_thinking"] = False
+            
             return self._tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
                 add_generation_prompt=True,
+                **extra_kwargs,
             )
         else:
             # Fallback: naive role-labelled concatenation
