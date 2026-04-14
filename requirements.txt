@@ -7,8 +7,11 @@ datasets
 accelerate
 tqdm
 
-
 sentencepiece>=0.1.99   # required by some HF tokenisers
 
 # Whisper for audio transcription
 openai-whisper>=20231117
+
+# Transformers for LLM inference
+transformers>=4.40.0
+torch>=2.0.0

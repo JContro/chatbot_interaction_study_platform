@@ -78,14 +78,14 @@ class HuggingFaceLLM(BaseLLM):
             if self.device == "auto":
                 self._model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch_dtype,
+                    dtype=torch_dtype,
                     device_map="auto",
                     cache_dir=cache_dir,
                 )
             else:
                 self._model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch_dtype,
+                    dtype=torch_dtype,
                     cache_dir=cache_dir,
                 )
                 self._model = self._model.to(self.device)

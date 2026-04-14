@@ -172,16 +172,14 @@ LOGOUT_REDIRECT_URL = 'login'
 # Device options: 'cpu' | 'cuda' | 'mps' | 'auto'
 # ---------------------------------------------------------------------------
 LLM_CONFIG = {
-    "provider": "accounts.llm.vllm.VLLM",
+    "provider": "accounts.llm.huggingface.HuggingFaceLLM",
     "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
-    "tensor_parallel_size": int(os.getenv("LLM_TENSOR_PARALLEL_SIZE", "1")),
-    "gpu_memory_utilization": float(os.getenv("LLM_GPU_MEMORY_UTILIZATION", "0.7")),
-    "max_model_len": int(os.getenv("LLM_MAX_MODEL_LEN", "8192")),
-    "quantization": os.getenv("LLM_QUANTIZATION") or None,
-    # Set to True to skip CUDA graph capture (faster startup, slightly slower inference)
-    "enforce_eager": os.getenv("LLM_ENFORCE_EAGER", "False").lower() in ("true", "1", "yes"),
-    # Enable chunked prefill for better latency
-    "enable_chunked_prefill": os.getenv("LLM_CHUNKED_PREFILL", "True").lower() in ("true", "1", "yes"),
+    # Device: 'cpu' | 'cuda' | 'mps' | 'auto'
+    "device": os.getenv("LLM_DEVICE", "cuda"),
+    # Torch dtype: 'float32' | 'float16' | 'bfloat16'
+    "torch_dtype": os.getenv("LLM_TORCH_DTYPE", "float16"),
+    # Cache directory for downloaded models
+    "cache_dir": os.getenv("LLM_CACHE_DIR", None),
 }
 
 # OpenRouter Configuration for Admin LLM Suggest Analysis
