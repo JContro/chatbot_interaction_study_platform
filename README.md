@@ -22,9 +22,9 @@ docker build -t general_purpose_pork .
 docker run -d \
   --gpus all \
   -p 8086:8086 \
+  --ipc=host --ulimit memlock=-1 --ulimit stack=6710886 \
   -v $(pwd):/workspace \
-  --name chatbot_webapp \
-  general_purpose_pork
+  chatbot-study
 ```
 
 ### Environment Variables

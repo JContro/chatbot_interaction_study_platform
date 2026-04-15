@@ -15,3 +15,9 @@ openai-whisper>=20231117
 # Transformers for LLM inference
 transformers>=4.40.0
 torch>=2.0.0
+
+# TurboQuant for KV cache compression
+turboquant>=0.2.0
+
+# HTTP client for vLLM API calls
+requests>=2.31.0

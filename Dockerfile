@@ -8,6 +8,9 @@ ENV PYTHONUNBUFFERED=1
 # Set working directory
 WORKDIR /workspace
 
+# Create model cache directory for fast transformer loading
+RUN mkdir -p /workspace/.model_cache
+
 # Copy requirements first (without torch to avoid conflicts)
 COPY requirements.txt .
 

@@ -171,16 +171,44 @@ LOGOUT_REDIRECT_URL = 'login'
 #
 # Device options: 'cpu' | 'cuda' | 'mps' | 'auto'
 # ---------------------------------------------------------------------------
-LLM_CONFIG = {
-    "provider": "accounts.llm.huggingface.HuggingFaceLLM",
-    "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
-    # Device: 'cpu' | 'cuda' | 'mps' | 'auto'
-    "device": os.getenv("LLM_DEVICE", "cuda"),
-    # Torch dtype: 'float32' | 'float16' | 'bfloat16'
-    "torch_dtype": os.getenv("LLM_TORCH_DTYPE", "float16"),
-    # Cache directory for downloaded models
-    "cache_dir": os.getenv("LLM_CACHE_DIR", None),
-}
+
+# LLM Provider selection: set LLM_PROVIDER env var to either:
+#   - "huggingface"  : Use HuggingFace Transformers (loads model locally)
+#   - "vllm"          : Use vLLM server API (model runs on vLLM server, no local model loading)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "huggingface")
+
+if LLM_PROVIDER == "vllm":
+    # vLLM API configuration - model runs on external vLLM server
+    # IMPORTANT: When using vLLM, no model is loaded locally, so GPU memory
+    # on this machine is not used. Set the vLLM server URL below.
+    LLM_CONFIG = {
+        "provider": "accounts.llm.vllm.VLLMAPI",
+        # The model name should match what's running on the vLLM server
+        "model_name": os.getenv("LLM_MODEL_NAME", "Qwen/Qwen3-14QwB"),
+        # Base URL of the vLLM server (default assumes it's on localhost)
+        "api_base": os.getenv("VLLM_API_BASE", "http://localhost:8000"),
+        # Optional API key for vLLM server authentication
+        "api_key": os.getenv("VLLM_API_KEY", None),
+        # Request timeout in seconds
+        "timeout": int(os.getenv("VLLM_TIMEOUT", "120")),
+    }
+else:
+    # HuggingFace configuration - model is loaded locally (requires GPU memory)
+    LLM_CONFIG = {
+        "provider": "accounts.llm.huggingface.HuggingFaceLLM",
+        "model_name": os.getenv("LLM_MODEL_NAME", "HuggingFaceTB/SmolLM-135M"),
+        # Device: 'cpu' | 'cuda' | 'mps' | 'auto'
+        # "use_flash_attention_2": False,
+        "device": os.getenv("LLM_DEVICE", "cuda"),
+        # Torch dtype: 'float32' | 'float16' | 'bfloat16'
+        "dtype": os.getenv("LLM_TORCH_DTYPE", "float16"),
+        # Quantization: 'bnb_4bit' | 'bnb_8bit' | None
+        "quantization": os.getenv("LLM_QUANTIZATION", "bnb_4bit"),
+        # Cache directory for downloaded models (stored in workspace for fast loading)
+        "cache_dir": os.getenv("LLM_CACHE_DIR", "/workspace/.model_cache"),
+        # TurboQuant KV cache compression bits (e.g. 4 for 4-bit compression, or None to disable)
+        "turboquant_bits": int(os.getenv("LLM_TURBOQUANT_BITS", "0")) or None,
+    }
 
 # OpenRouter Configuration for Admin LLM Suggest Analysis
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")

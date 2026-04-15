@@ -28,6 +28,15 @@ class HuggingFaceLLM(BaseLLM):
         torch_dtype  – torch dtype string, e.g. 'float16' or 'float32'.
                        Defaults to float32 on CPU, float16 on GPU.
         cache_dir    – local directory to cache downloaded weights.
+        quantization  – quantization method: 'bnb_4bit', 'bnb_8bit', or None.
+                       When set, applies the corresponding quantization config to the model.
+        bnb_compute_dtype – compute dtype for BitsAndBytes quantization (e.g. 'float16').
+        bnb_4bit_use_double_quant – use double quantization for 4-bit BitsAndBytes.
+        bnb_4bit_quant_type – quantization type for 4-bit BitsAndBytes ('fp4' or 'nf4').
+        use_flash_attention_2 – If True, enables Flash Attention 2 for faster inference.
+                                Defaults to False. Only supported on GPU.
+        turboquant_bits – If set (e.g. 4), applies TurboQuant KV cache compression
+                          during generation to reduce memory usage.
     """
 
     def __init__(self, model_name: str, device: str = "cpu", **kwargs):
@@ -35,6 +44,7 @@ class HuggingFaceLLM(BaseLLM):
         self.device = device
         self._model = None
         self._tokenizer = None
+        self._turboquant_cache = None
 
     # ------------------------------------------------------------------
     # BaseLLM interface
@@ -50,6 +60,7 @@ class HuggingFaceLLM(BaseLLM):
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
             cache_dir = self.config.get("cache_dir", None)
+            quantization = self.config.get("quantization", None)
 
             logger.info("Loading tokenizer for '%s' …", self.model_name)
             self._tokenizer = AutoTokenizer.from_pretrained(
@@ -67,27 +78,60 @@ class HuggingFaceLLM(BaseLLM):
                 torch_dtype = torch.float16
 
             logger.info(
-                "Loading model '%s' on device '%s' (dtype=%s) …",
+                "Loading model '%s' on device '%s' (dtype=%s, quantization=%s) …",
                 self.model_name,
                 self.device,
                 torch_dtype,
+                quantization,
             )
+
+            # Build model loading kwargs
+            model_kwargs = {
+                "dtype": torch_dtype,
+                "cache_dir": cache_dir,
+            }
+
+            # Apply quantization config if specified
+            if quantization == "bnb_4bit":
+                from transformers import BitsAndBytesConfig
+                logger.info("Applying BitsAndBytes 4-bit quantization to model '%s' …", self.model_name)
+                bnb_compute_dtype_str = self.config.get("bnb_compute_dtype", "float16")
+                bnb_compute_dtype = getattr(torch, bnb_compute_dtype_str)
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    compute_dtype=bnb_compute_dtype,
+                    use_double_quant=self.config.get("bnb_4bit_use_double_quant", True),
+                    bnb_4bit_quant_type=self.config.get("bnb_4bit_quant_type", "nf4"),
+                )
+                model_kwargs["quantization_config"] = bnb_config
+            elif quantization == "bnb_8bit":
+                from transformers import BitsAndBytesConfig
+                logger.info("Applying BitsAndBytes 8-bit quantization to model '%s' …", self.model_name)
+                bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+                model_kwargs["quantization_config"] = bnb_config
+
+            # Apply Flash Attention 2 if specified
+            use_flash_attention_2 = self.config.get("use_flash_attention_2", False)
+            if use_flash_attention_2 and self.device != "cpu":
+                logger.info("Enabling Flash Attention 2 for model '%s' …", self.model_name)
+                # Use attn_implementation for newer transformers (>4.36)
+                # Note: Flash Attention 2 has a head_dim limit of 256; some models (e.g. Gemma 4)
+                # may hit this limit at runtime. If so, disable flash attention for this model.
+                model_kwargs["attn_implementation"] = "flash_attention_2"
 
             # When device == 'auto' let accelerate handle placement;
             # otherwise load on CPU first then move.
             if self.device == "auto":
-                self._model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    dtype=torch_dtype,
-                    device_map="auto",
-                    cache_dir=cache_dir,
-                )
+                model_kwargs["device_map"] = "auto"
             else:
-                self._model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    dtype=torch_dtype,
-                    cache_dir=cache_dir,
-                )
+                model_kwargs["device_map"] = None  # Will move manually below
+
+            self._model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                **model_kwargs,
+            )
+
+            if self.device != "auto":
                 self._model = self._model.to(self.device)
 
             self._model.eval()
@@ -169,6 +213,15 @@ class HuggingFaceLLM(BaseLLM):
             input_text, return_tensors="pt").to(model_device)
         prompt_length = inputs["input_ids"].shape[1]
 
+        # Setup TurboQuant KV cache compression if configured
+        use_turboquant = self.config.get("turboquant_bits", None) is not None
+        past_key_values = None
+        if use_turboquant:
+            from turboquant import TurboQuantCache
+            bits = self.config.get("turboquant_bits", 4)
+            self._turboquant_cache = TurboQuantCache(bits=bits)
+            past_key_values = self._turboquant_cache
+
         with torch.no_grad():
             output_ids = self._model.generate(
                 **inputs,
@@ -179,6 +232,7 @@ class HuggingFaceLLM(BaseLLM):
                 repetition_penalty=params.repetition_penalty,
                 do_sample=params.do_sample,
                 pad_token_id=self._tokenizer.eos_token_id,
+                past_key_values=past_key_values,
             )
 
         # Decode only the newly generated tokens (strip the echoed prompt).
@@ -257,6 +311,15 @@ class HuggingFaceLLM(BaseLLM):
             skip_special_tokens=True
         )
 
+        # Setup TurboQuant KV cache compression if configured
+        use_turboquant = self.config.get("turboquant_bits", None) is not None
+        past_key_values = None
+        if use_turboquant:
+            from turboquant import TurboQuantCache
+            bits = self.config.get("turboquant_bits", 4)
+            self._turboquant_cache = TurboQuantCache(bits=bits)
+            past_key_values = self._turboquant_cache
+
         generation_kwargs = {
             **inputs,
             "max_new_tokens": params.max_new_tokens,
@@ -267,6 +330,7 @@ class HuggingFaceLLM(BaseLLM):
             "do_sample": params.do_sample,
             "pad_token_id": self._tokenizer.eos_token_id,
             "streamer": streamer,
+            "past_key_values": past_key_values,
         }
 
         # Run generation in a separate thread
