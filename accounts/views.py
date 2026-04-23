@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
-from .models import User, Conversation, ConversationMessage, MessageAnnotation
+from .models import User, Conversation, ConversationMessage, MessageAnnotation, StanceRating
 from .utils import send_verification_email, verify_email, send_password_reset_email
 from .topics_data import (
     CONVERSATION_TOPICS, get_topic_areas, get_topics_by_area,
@@ -231,6 +231,84 @@ def topic_selection_view(request):
 
 
 @login_required
+def stance_rating_view(request, topic_id=None, rating_type='pre'):
+    """
+    Survey view - collects Likert scale ratings for each stance.
+    Can be pre-conversation (before chat) or post-conversation (after chat).
+    """
+    # Check if user's email is verified before allowing access
+    if not request.user.is_email_verified:
+        messages.warning(
+            request, 'Please verify your email address to access the chat.')
+        logout(request)
+        return redirect('login')
+
+    # If no topic is selected, redirect to topic selection
+    if topic_id is None:
+        return redirect('topic_selection')
+
+    # Get the topic data
+    topic_data = get_topic_by_id(int(topic_id))
+    if topic_data is None:
+        return redirect('topic_selection')
+
+    # Determine if this is pre or post conversation rating
+    is_post = rating_type == 'post'
+    
+    # For pre-conversation: check if user already submitted ratings for this topic and type
+    # For post-conversation: check if there's an existing post rating (for page refreshes)
+    # but don't pre-fill with pre-conversation values
+    existing_rating = StanceRating.objects.filter(
+        user=request.user, topic_id=topic_id, rating_type=rating_type).first()
+
+    if request.method == 'POST':
+        # Save the ratings
+        pro_rating = int(request.POST.get('pro_rating', 3))
+        con_rating = int(request.POST.get('con_rating', 3))
+        neutral_rating = int(request.POST.get('neutral_rating', 3))
+
+        # Update or create the rating
+        if existing_rating:
+            existing_rating.pro_rating = pro_rating
+            existing_rating.con_rating = con_rating
+            existing_rating.neutral_rating = neutral_rating
+            existing_rating.save()
+        else:
+            StanceRating.objects.create(
+                user=request.user,
+                topic_id=topic_id,
+                topic_area=topic_data['topic_area'],
+                specific_question=topic_data['specific_question'],
+                rating_type=rating_type,
+                pro_rating=pro_rating,
+                con_rating=con_rating,
+                neutral_rating=neutral_rating
+            )
+
+        if is_post:
+            # After post-conversation rating, go to topic selection (homepage)
+            messages.success(request, 'Thank you for completing the conversation!')
+            return redirect('topic_selection')
+        else:
+            # After pre-conversation rating, go to chat
+            return redirect('chat_topic', topic_id=topic_id)
+
+    # Build context with topic data and stance positions
+    chat_context = {
+        'topic_id': topic_id,
+        'topic_area': topic_data['topic_area'],
+        'specific_question': topic_data['specific_question'],
+        'stance_pro': topic_data['stances']['pro'],
+        'stance_con': topic_data['stances']['con'],
+        'stance_neutral': topic_data['stances']['neutral'],
+        'existing_rating': existing_rating,
+        'is_post': is_post,
+    }
+
+    return render(request, 'accounts/stance_rating.html', chat_context)
+
+
+@login_required
 def chat_view(request, topic_id=None):
     """
     Main chat view - the main application page.
@@ -256,15 +334,21 @@ def chat_view(request, topic_id=None):
     assigned_stance = random.choice(stances)
     stance_data = topic_data['stances'][assigned_stance]
 
+    # Get user's pre-conversation stance ratings (if any)
+    stance_rating = StanceRating.objects.filter(
+        user=request.user, topic_id=topic_id).first()
+
     # Create a context with all the necessary information
     chat_context = {
         'topic_id': topic_id,
         'topic_area': topic_data['topic_area'],
         'specific_question': topic_data['specific_question'],
         'assigned_stance': assigned_stance,
-        'stance_pro': stance_data['pro'],
-        'stance_con': stance_data['con'],
-        'stance_neutral': stance_data['neutral'],
+        'assigned_stance_text': stance_data,
+        'stance_pro': topic_data['stances']['pro'],
+        'stance_con': topic_data['stances']['con'],
+        'stance_neutral': topic_data['stances']['neutral'],
+        'stance_rating': stance_rating,
     }
 
     return render(request, 'accounts/chat.html', chat_context)

@@ -177,6 +177,51 @@ class MessageAnnotation(models.Model):
         return f"Annotation on '{self.selected_text[:30]}...' by {self.user.email}"
 
 
+class StanceRating(models.Model):
+    """
+    Model for storing user's stance ratings on a Likert scale.
+    Can be pre-conversation (before chat) or post-conversation (after chat).
+    Saved to analyze if people's opinions changed after the conversation.
+    """
+    RATING_TYPE_CHOICES = [
+        ('pre', 'Pre-conversation'),
+        ('post', 'Post-conversation'),
+    ]
+
+    user = models.ForeignKey(
+        'User', on_delete=models.CASCADE, related_name='stance_ratings')
+    topic_id = models.IntegerField(
+        help_text="ID of the conversation topic (1-20)")
+    topic_area = models.CharField(max_length=200)
+    specific_question = models.TextField()
+    
+    # Rating type: pre or post conversation
+    rating_type = models.CharField(
+        max_length=10, choices=RATING_TYPE_CHOICES, default='pre',
+        help_text="Whether this rating was before or after the conversation")
+    
+    # Likert scale ratings (1-5) for each stance
+    pro_rating = models.IntegerField(
+        choices=[(1, '1 - Strongly Disagree'), (2, '2 - Disagree'), (3, '3 - Neutral'), (4, '4 - Agree'), (5, '5 - Strongly Agree')],
+        help_text="Rating for the 'pro' stance")
+    con_rating = models.IntegerField(
+        choices=[(1, '1 - Strongly Disagree'), (2, '2 - Disagree'), (3, '3 - Neutral'), (4, '4 - Agree'), (5, '5 - Strongly Agree')],
+        help_text="Rating for the 'con' stance")
+    neutral_rating = models.IntegerField(
+        choices=[(1, '1 - Strongly Disagree'), (2, '2 - Disagree'), (3, '3 - Neutral'), (4, '4 - Agree'), (5, '5 - Strongly Agree')],
+        help_text="Rating for the 'neutral' stance")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['user', 'topic_id', 'rating_type']
+
+    def __str__(self):
+        return f"Stance ratings by {self.user.email} on '{self.specific_question[:50]}...'"
+
+
 class UserManager(BaseUserManager):
     """Custom manager for User model that uses email instead of username."""
 

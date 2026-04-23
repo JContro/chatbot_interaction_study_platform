@@ -186,7 +186,7 @@ if LLM_PROVIDER == "vllm":
         # The model name should match what's running on the vLLM server
         "model_name": os.getenv("LLM_MODEL_NAME", "Qwen/Qwen3-14QwB"),
         # Base URL of the vLLM server (default assumes it's on localhost)
-        "api_base": os.getenv("VLLM_API_BASE", "http://localhost:8000"),
+        "api_base": os.getenv("VLLM_API_BASE", "http://localhost:8090"),
         # Optional API key for vLLM server authentication
         "api_key": os.getenv("VLLM_API_KEY", None),
         # Request timeout in seconds

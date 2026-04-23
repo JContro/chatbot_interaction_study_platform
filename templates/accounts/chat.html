@@ -92,10 +92,10 @@
             <i class="bi bi-record-circle" style="animation: pulse 1s infinite;"></i> Recording... Click mic to stop
         </div>
         
-        <!-- Continue to Analysis Button -->
+        <!-- Finish Conversation Button -->
         <div class="mt-3 pt-3" style="border-top: 1px solid var(--claude-border);">
-            <a href="{% url 'analysis' topic_id %}" class="claude-btn" style="width: 100%; display: block; text-align: center; text-decoration: none;">
-                <i class="bi bi-clipboard2-check"></i> Continue to Analysis
+            <a href="{% url 'stance_rating_post' topic_id %}" class="claude-btn" style="width: 100%; display: block; text-align: center; text-decoration: none;">
+                <i class="bi bi-check-circle"></i> Finish Conversation
             </a>
         </div>
     </div>

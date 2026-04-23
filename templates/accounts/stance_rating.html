@@ -1,0 +1,300 @@
+{% extends 'base.html' %}
+
+{% block title %}Rate Your Stance - Chatbot Study{% endblock %}
+
+{% block content %}
+<div class="stance-rating-container" style="padding: 0 20px; max-width: 800px; margin: 0 auto;">
+    <!-- Header -->
+    <nav class="d-flex justify-content-between align-items-center py-3 mb-4" style="border-bottom: 1px solid var(--claude-border);">
+        <div class="claude-logo">
+            <i class="bi bi-chat-dots-fill"></i> Chatbot Study
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            {% if user.is_staff %}
+            <a href="{% url 'admin_conversations' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;" title="Admin Panel" target="_blank">
+                <i class="bi bi-shield-lock"></i> Admin
+            </a>
+            {% endif %}
+            <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
+            <a href="{% url 'logout' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-box-arrow-right"></i> Sign Out
+            </a>
+        </div>
+    </nav>
+
+    <!-- Topic Info -->
+    <div class="text-center mb-4">
+        <span class="topic-area-badge">{{ topic_area }}</span>
+        <h1 class="mt-3 mb-2" style="color: var(--claude-text); font-size: 1.5rem; font-weight: 600;">{{ specific_question }}</h1>
+        {% if is_post %}
+        <p class="text-muted">Please rate your agreement with each stance after the conversation. This is a fresh rating - your previous responses will not be shown.</p>
+        {% else %}
+        <p class="text-muted">Please rate your agreement with each stance before starting the conversation.</p>
+        {% endif %}
+    </div>
+
+    <!-- Stance Rating Form -->
+    <form method="post" action="{% if is_post %}{% url 'stance_rating_post' topic_id %}{% else %}{% url 'stance_rating' topic_id %}{% endif %}">
+        {% csrf_token %}
+        
+        <div class="stance-cards">
+            <!-- Pro Stance -->
+            <div class="claude-card stance-card mb-4 p-4">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="stance-icon pro-icon">
+                        <i class="bi bi-hand-thumbs-up"></i>
+                    </div>
+                    <h3 class="mb-0 ms-3" style="color: var(--claude-text); font-size: 1.1rem; font-weight: 600;">Pro Stance</h3>
+                </div>
+                <p class="stance-text mb-4">{{ stance_pro }}</p>
+                
+                <div class="rating-section">
+                    <label class="rating-label mb-2">How much do you agree with this stance?</label>
+                    <div class="rating-scale d-flex justify-content-between align-items-center">
+                        <span class="rating-label-small">Strongly Disagree</span>
+                        <div class="rating-buttons d-flex gap-2">
+                            <label class="rating-btn {% if existing_rating.pro_rating == 1 %}selected{% endif %}">
+                                <input type="radio" name="pro_rating" value="1" {% if existing_rating.pro_rating == 1 %}checked{% endif %} required>
+                                <span>1</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.pro_rating == 2 %}selected{% endif %}">
+                                <input type="radio" name="pro_rating" value="2" {% if existing_rating.pro_rating == 2 %}checked{% endif %}>
+                                <span>2</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.pro_rating == 3 %}selected{% endif %}">
+                                <input type="radio" name="pro_rating" value="3" {% if existing_rating.pro_rating == 3 %}checked{% endif %}>
+                                <span>3</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.pro_rating == 4 %}selected{% endif %}">
+                                <input type="radio" name="pro_rating" value="4" {% if existing_rating.pro_rating == 4 %}checked{% endif %}>
+                                <span>4</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.pro_rating == 5 %}selected{% endif %}">
+                                <input type="radio" name="pro_rating" value="5" {% if existing_rating.pro_rating == 5 %}checked{% endif %}>
+                                <span>5</span>
+                            </label>
+                        </div>
+                        <span class="rating-label-small">Strongly Agree</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Con Stance -->
+            <div class="claude-card stance-card mb-4 p-4">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="stance-icon con-icon">
+                        <i class="bi bi-hand-thumbs-down"></i>
+                    </div>
+                    <h3 class="mb-0 ms-3" style="color: var(--claude-text); font-size: 1.1rem; font-weight: 600;">Con Stance</h3>
+                </div>
+                <p class="stance-text mb-4">{{ stance_con }}</p>
+                
+                <div class="rating-section">
+                    <label class="rating-label mb-2">How much do you agree with this stance?</label>
+                    <div class="rating-scale d-flex justify-content-between align-items-center">
+                        <span class="rating-label-small">Strongly Disagree</span>
+                        <div class="rating-buttons d-flex gap-2">
+                            <label class="rating-btn {% if existing_rating.con_rating == 1 %}selected{% endif %}">
+                                <input type="radio" name="con_rating" value="1" {% if existing_rating.con_rating == 1 %}checked{% endif %} required>
+                                <span>1</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.con_rating == 2 %}selected{% endif %}">
+                                <input type="radio" name="con_rating" value="2" {% if existing_rating.con_rating == 2 %}checked{% endif %}>
+                                <span>2</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.con_rating == 3 %}selected{% endif %}">
+                                <input type="radio" name="con_rating" value="3" {% if existing_rating.con_rating == 3 %}checked{% endif %}>
+                                <span>3</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.con_rating == 4 %}selected{% endif %}">
+                                <input type="radio" name="con_rating" value="4" {% if existing_rating.con_rating == 4 %}checked{% endif %}>
+                                <span>4</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.con_rating == 5 %}selected{% endif %}">
+                                <input type="radio" name="con_rating" value="5" {% if existing_rating.con_rating == 5 %}checked{% endif %}>
+                                <span>5</span>
+                            </label>
+                        </div>
+                        <span class="rating-label-small">Strongly Agree</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Neutral Stance -->
+            <div class="claude-card stance-card mb-4 p-4">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="stance-icon neutral-icon">
+                        <i class="bi bi-balance-scale"></i>
+                    </div>
+                    <h3 class="mb-0 ms-3" style="color: var(--claude-text); font-size: 1.1rem; font-weight: 600;">Neutral Stance</h3>
+                </div>
+                <p class="stance-text mb-4">{{ stance_neutral }}</p>
+                
+                <div class="rating-section">
+                    <label class="rating-label mb-2">How much do you agree with this stance?</label>
+                    <div class="rating-scale d-flex justify-content-between align-items-center">
+                        <span class="rating-label-small">Strongly Disagree</span>
+                        <div class="rating-buttons d-flex gap-2">
+                            <label class="rating-btn {% if existing_rating.neutral_rating == 1 %}selected{% endif %}">
+                                <input type="radio" name="neutral_rating" value="1" {% if existing_rating.neutral_rating == 1 %}checked{% endif %} required>
+                                <span>1</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.neutral_rating == 2 %}selected{% endif %}">
+                                <input type="radio" name="neutral_rating" value="2" {% if existing_rating.neutral_rating == 2 %}checked{% endif %}>
+                                <span>2</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.neutral_rating == 3 %}selected{% endif %}">
+                                <input type="radio" name="neutral_rating" value="3" {% if existing_rating.neutral_rating == 3 %}checked{% endif %}>
+                                <span>3</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.neutral_rating == 4 %}selected{% endif %}">
+                                <input type="radio" name="neutral_rating" value="4" {% if existing_rating.neutral_rating == 4 %}checked{% endif %}>
+                                <span>4</span>
+                            </label>
+                            <label class="rating-btn {% if existing_rating.neutral_rating == 5 %}selected{% endif %}">
+                                <input type="radio" name="neutral_rating" value="5" {% if existing_rating.neutral_rating == 5 %}checked{% endif %}>
+                                <span>5</span>
+                            </label>
+                        </div>
+                        <span class="rating-label-small">Strongly Agree</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="text-center mt-4 mb-5">
+            <button type="submit" class="claude-btn" style="padding: 14px 40px; font-size: 1rem;">
+                {% if is_post %}
+                <i class="bi bi-check-circle me-2"></i>Submit and Finish
+                {% else %}
+                <i class="bi bi-chat-dots me-2"></i>Start Conversation
+                {% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .stance-rating-container {
+        min-height: 80vh;
+    }
+    
+    .topic-area-badge {
+        display: inline-block;
+        background-color: var(--claude-accent);
+        color: #18191b;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    
+    .stance-card {
+        transition: all 0.2s ease;
+    }
+    
+    .stance-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        font-size: 20px;
+    }
+    
+    .pro-icon {
+        background-color: rgba(40, 167, 69, 0.15);
+        color: #28a745;
+    }
+    
+    .con-icon {
+        background-color: rgba(220, 53, 69, 0.15);
+        color: #dc3545;
+    }
+    
+    .neutral-icon {
+        background-color: rgba(108, 117, 125, 0.15);
+        color: #6c757d;
+    }
+    
+    .stance-text {
+        color: var(--claude-text);
+        font-size: 15px;
+        line-height: 1.6;
+        padding: 16px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        border-left: 3px solid var(--claude-accent);
+    }
+    
+    .rating-section {
+        padding-top: 16px;
+        border-top: 1px solid var(--claude-border);
+    }
+    
+    .rating-label {
+        display: block;
+        color: var(--claude-text);
+        font-size: 14px;
+        font-weight: 500;
+    }
+    
+    .rating-scale {
+        margin-top: 12px;
+    }
+    
+    .rating-label-small {
+        color: var(--claude-text-light);
+        font-size: 12px;
+        width: 120px;
+    }
+    
+    .rating-label-small:last-child {
+        text-align: right;
+    }
+    
+    .rating-buttons {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .rating-btn {
+        position: relative;
+    }
+    
+    .rating-btn input {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+    }
+    
+    .rating-btn span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: 2px solid var(--claude-border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 500;
+        color: var(--claude-text-light);
+    }
+    
+    .rating-btn:hover span {
+        border-color: var(--claude-accent);
+        color: var(--claude-accent);
+    }
+    
+    .rating-btn.selected span,
+    .rating-btn input:checked + span {
+        background-color: var(--claude-accent);
+        border-color: var(--claude-accent);
+        color: #18191b;
+    }
+</style>
+
+{% endblock %}

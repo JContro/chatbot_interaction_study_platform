@@ -27,12 +27,12 @@ class VLLMAPI(BaseLLM):
     a vLLM server that is expected to be already running.
 
     Configuration kwargs:
-        api_base      – Base URL of the vLLM server (default: http://localhost:8000)
+        api_base      – Base URL of the vLLM server (default: http://localhost:8090)
         api_key       – API key for authentication (optional, default: None)
         timeout       – Request timeout in seconds (default: 120)
     """
 
-    def __init__(self, model_name: str, api_base: str = "http://localhost:8000", **kwargs):
+    def __init__(self, model_name: str, api_base: str = "http://localhost:8090", **kwargs):
         super().__init__(model_name, **kwargs)
         self.api_base = api_base.rstrip("/")
         self.api_key = self.config.get("api_key", None)
