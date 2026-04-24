@@ -3,12 +3,98 @@
 {% block title %}Welcome - Chatbot Study{% endblock %}
 
 {% block content %}
+{% if is_authenticated %}
+{# Authenticated user view with conversation history #}
+<div class="container" style="padding: 40px 20px; max-width: 900px; margin: 0 auto;">
+    {# Header #}
+    <nav class="d-flex justify-content-between align-items-center py-3 mb-4" style="border-bottom: 1px solid var(--claude-border);">
+        <a href="{% url 'home' %}" class="text-decoration-none">
+            <div class="claude-logo">
+                <i class="bi bi-chat-dots-fill"></i> Chatbot Study
+            </div>
+        </a>
+        <div class="d-flex align-items-center gap-3">
+            <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
+            <a href="{% url 'topic_selection' %}" class="claude-btn btn-sm" style="text-decoration: none;">
+                <i class="bi bi-plus-circle"></i> New Chat
+            </a>
+            <a href="{% url 'logout' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-box-arrow-right"></i> Sign Out
+            </a>
+        </div>
+    </nav>
+    
+    {# Welcome message #}
+    <div class="text-center mb-5" style="padding-top: 20px;">
+        <h1 class="mb-3" style="color: var(--claude-text); font-size: 1.75rem; font-weight: 600;">Your Conversation History</h1>
+        <p class="text-muted">Review all the chats you've had in this study.</p>
+    </div>
+    
+    {# Conversation History #}
+    {% if conversation_history %}
+        <div class="row justify-content-center g-4">
+            {% for conv in conversation_history %}
+            <div class="col-md-6 col-lg-5">
+                <div class="claude-card h-100 p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <span class="badge" style="background-color: var(--claude-green); color: #18191b; font-size: 11px; font-weight: 600;">
+                            {{ conv.topic_area }}
+                        </span>
+                        <span class="text-muted" style="font-size: 12px;">
+                            {{ conv.completed_at|date:"M d, Y" }}
+                        </span>
+                    </div>
+                    <h4 class="mb-3" style="font-size: 1rem; font-weight: 600; color: var(--claude-text);">
+                        {{ conv.specific_question }}
+                    </h4>
+                    <div class="d-flex gap-3" style="font-size: 12px;">
+                        <div>
+                            <span class="text-muted">Pro:</span>
+                            <span style="color: var(--claude-green); font-weight: 600;">{{ conv.pro_rating }}/5</span>
+                        </div>
+                        <div>
+                            <span class="text-muted">Con:</span>
+                            <span style="color: var(--claude-red); font-weight: 600;">{{ conv.con_rating }}/5</span>
+                        </div>
+                        <div>
+                            <span class="text-muted">Neutral:</span>
+                            <span style="color: var(--claude-text-muted); font-weight: 600;">{{ conv.neutral_rating }}/5</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="text-center mt-5">
+            <a href="{% url 'topic_selection' %}" class="claude-btn" style="text-decoration: none;">
+                <i class="bi bi-plus-circle"></i> Start New Conversation
+            </a>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <div class="claude-card" style="max-width: 400px; margin: 0 auto; padding: 40px;">
+                <i class="bi bi-chat-dots" style="font-size: 3rem; color: var(--claude-text-dim); margin-bottom: 20px;"></i>
+                <h3 class="mb-3" style="color: var(--claude-text); font-size: 1.25rem; font-weight: 600;">No conversations yet</h3>
+                <p class="text-muted mb-4">Start your first conversation with the chatbot to participate in the study.</p>
+                <a href="{% url 'topic_selection' %}" class="claude-btn" style="text-decoration: none;">
+                    <i class="bi bi-plus-circle"></i> Start Conversation
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+{% else %}
+{# Guest view with login/register #}
 <div class="container" style="padding: 40px 20px;">
     <div class="row justify-content-center align-items-center" style="min-height: 80vh;">
         <div class="col-md-6 col-lg-5 text-center">
-            <div class="claude-logo mb-4" style="font-size: 2.5rem;">
-                <i class="bi bi-chat-dots-fill"></i> Chatbot Study
-            </div>
+            <a href="{% url 'home' %}" class="text-decoration-none">
+                <div class="claude-logo mb-4" style="font-size: 2.5rem;">
+                    <i class="bi bi-chat-dots-fill"></i> Chatbot Study
+                </div>
+            </a>
             
             <h1 class="h3 mb-3" style="color: var(--claude-text); font-weight: 600;">Welcome to Chatbot Study</h1>
             
@@ -33,4 +119,5 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}

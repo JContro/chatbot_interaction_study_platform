@@ -24,10 +24,38 @@ logger = logging.getLogger(__name__)
 def home_view(request):
     """
     Landing page with welcome message and login/register links.
+    For authenticated users, shows conversation history.
     """
     if request.user.is_authenticated:
-        return redirect('topic_selection')
-    return render(request, 'accounts/home.html')
+        # Get user's completed conversations (topics with post-conversation stance ratings)
+        completed_conversations = StanceRating.objects.filter(
+            user=request.user,
+            rating_type='post'
+        ).select_related('user').order_by('-created_at')
+        
+        # Group by topic to get unique conversations
+        conversation_history = []
+        seen_topics = set()
+        for rating in completed_conversations:
+            if rating.topic_id not in seen_topics:
+                seen_topics.add(rating.topic_id)
+                conversation_history.append({
+                    'topic_id': rating.topic_id,
+                    'topic_area': rating.topic_area,
+                    'specific_question': rating.specific_question,
+                    'completed_at': rating.created_at,
+                    'pro_rating': rating.pro_rating,
+                    'con_rating': rating.con_rating,
+                    'neutral_rating': rating.neutral_rating,
+                })
+        
+        return render(request, 'accounts/home.html', {
+            'conversation_history': conversation_history,
+            'is_authenticated': True
+        })
+    return render(request, 'accounts/home.html', {
+        'is_authenticated': False
+    })
 
 
 def login_view(request):
@@ -211,6 +239,14 @@ def topic_selection_view(request):
     # Get all unique topic areas
     topic_areas = get_topic_areas()
 
+    # Get completed topic IDs for this user (topics with post-conversation stance ratings)
+    completed_topic_ids = set(
+        StanceRating.objects.filter(
+            user=request.user,
+            rating_type='post'
+        ).values_list('topic_id', flat=True)
+    )
+
     # Build a structured dictionary of topic areas with their questions
     topic_areas_with_topics = []
     for area in topic_areas:
@@ -226,7 +262,8 @@ def topic_selection_view(request):
 
     return render(request, 'accounts/topic_selection.html', {
         'topic_areas': topic_areas_with_topics,
-        'topic_areas_json': topic_areas_json
+        'topic_areas_json': topic_areas_json,
+        'completed_topic_ids': list(completed_topic_ids)
     })
 
 

@@ -6,9 +6,11 @@
 <div class="topic-selection-container" style="padding: 0 20px; max-width: 900px; margin: 0 auto;">
     <!-- Header -->
     <nav class="d-flex justify-content-between align-items-center py-3 mb-4" style="border-bottom: 1px solid var(--claude-border);">
-        <div class="claude-logo">
-            <i class="bi bi-chat-dots-fill"></i> Chatbot Study
-        </div>
+        <a href="{% url 'home' %}" class="text-decoration-none">
+            <div class="claude-logo">
+                <i class="bi bi-chat-dots-fill"></i> Chatbot Study
+            </div>
+        </a>
         <div class="d-flex align-items-center gap-3">
             {% if user.is_staff %}
             <a href="{% url 'admin_conversations' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;" title="Admin Panel" target="_blank">
@@ -128,65 +130,121 @@
         border-color: var(--claude-accent);
         box-shadow: 0 8px 24px rgba(212, 165, 116, 0.15);
     }
+    
+    /* Completed/disabled topic styling */
+    .question-card.completed {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    
+    .question-card.completed:hover {
+        transform: none;
+        border-color: var(--claude-border);
+        box-shadow: none;
+    }
+    
+    .completed-badge {
+        display: inline-block;
+        background-color: var(--claude-text-dim);
+        color: var(--claude-bg);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 8px;
+        text-transform: uppercase;
+    }
 </style>
 
 <script>
-    // Topic data passed from Django
-    const topicAreas = {{ topic_areas_json|safe }};
-    
-    // Step 1 elements
-    const step1 = document.getElementById('step-1');
-    const topicAreaCards = document.querySelectorAll('.topic-area-card');
-    
-    // Step 2 elements
-    const step2 = document.getElementById('step-2');
-    const backBtn = document.getElementById('back-to-areas');
-    const questionsContainer = document.getElementById('questions-container');
-    
-    // Handle topic area selection
-    topicAreaCards.forEach(card => {
-        card.addEventListener('click', () => {
-            const topicAreaName = card.dataset.topicArea;
-            const areaData = topicAreas.find(a => a.name === topicAreaName);
-            
-            if (areaData) {
-                showQuestions(areaData);
-            }
-        });
-    });
-    
-    // Handle back button
-    backBtn.addEventListener('click', () => {
-        step1.style.display = 'block';
-        step2.style.display = 'none';
-    });
-    
-    function showQuestions(areaData) {
-        // Clear previous questions
-        questionsContainer.innerHTML = '';
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Topic selection script loaded');
         
-        // Populate questions
-        areaData.topics.forEach(topic => {
-            const col = document.createElement('div');
-            col.className = 'col-md-6 col-lg-5';
-            
-            col.innerHTML = `
-                <a href="/stance-rating/${topic.id}/" class="text-decoration-none">
-                    <div class="claude-card question-card h-100 p-4">
-                        <h4 class="mb-1" style="font-size: 1rem; font-weight: 600;">${topic.specific_question}</h4>
-                    </div>
-                </a>
-            `;
-            
-            questionsContainer.appendChild(col);
+        // Topic data passed from Django
+        const topicAreas = {{ topic_areas_json|safe }};
+        console.log('Topic areas loaded:', topicAreas);
+        
+        // Completed topic IDs passed from Django
+        const completedTopicIds = {{ completed_topic_ids }};
+        console.log('Completed topic IDs:', completedTopicIds);
+        
+        // Step 1 elements
+        const step1 = document.getElementById('step-1');
+        const topicAreaCards = document.querySelectorAll('.topic-area-card');
+        console.log('Found topic area cards:', topicAreaCards.length);
+        
+        // Step 2 elements
+        const step2 = document.getElementById('step-2');
+        const backBtn = document.getElementById('back-to-areas');
+        const questionsContainer = document.getElementById('questions-container');
+        
+        // Handle topic area selection
+        topicAreaCards.forEach(card => {
+            card.addEventListener('click', (e) => {
+                console.log('Card clicked:', card.dataset.topicArea);
+                const topicAreaName = card.dataset.topicArea;
+                const areaData = topicAreas.find(a => a.name === topicAreaName);
+                console.log('Area data found:', areaData);
+                
+                if (areaData) {
+                    showQuestions(areaData);
+                }
+            });
         });
         
-        // Show step 2
-        step1.style.display = 'none';
-        step2.style.display = 'block';
+        // Handle back button
+        backBtn.addEventListener('click', () => {
+            step1.style.display = 'block';
+            step2.style.display = 'none';
+        });
         
-        // Scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+        function showQuestions(areaData) {
+            console.log('showQuestions called with:', areaData);
+            console.log('step1:', step1);
+            console.log('step2:', step2);
+            console.log('questionsContainer:', questionsContainer);
+            
+            // Clear previous questions
+            questionsContainer.innerHTML = '';
+            
+            // Populate questions
+            areaData.topics.forEach(topic => {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-5';
+                
+                const isCompleted = completedTopicIds.includes(topic.id);
+                
+                if (isCompleted) {
+                    col.innerHTML = `
+                        <div class="claude-card question-card h-100 p-4 completed">
+                            <h4 class="mb-1" style="font-size: 1rem; font-weight: 600;">
+                                ${topic.specific_question}
+                                <span class="completed-badge">Completed</span>
+                            </h4>
+                        </div>
+                    `;
+                } else {
+                    col.innerHTML = `
+                        <a href="/stance-rating/${topic.id}/" class="text-decoration-none">
+                            <div class="claude-card question-card h-100 p-4">
+                                <h4 class="mb-1" style="font-size: 1rem; font-weight: 600;">${topic.specific_question}</h4>
+                            </div>
+                        </a>
+                    `;
+                }
+                
+                questionsContainer.appendChild(col);
+            });
+            
+            // Show step 2
+            step1.style.display = 'none';
+            step2.style.display = 'block';
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
 </script>
 {% endblock %}
