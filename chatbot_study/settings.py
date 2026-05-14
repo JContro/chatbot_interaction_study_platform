@@ -79,6 +79,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'chatbot_study.context_processors.risks_processor',
             ],
         },
     },
@@ -213,3 +214,6 @@ else:
 # OpenRouter Configuration for Admin LLM Suggest Analysis
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+
+# Risks list for display in header
+RISKS = ['Data Privacy', 'Security Breach', 'Compliance Risk', 'Reputational Risk']

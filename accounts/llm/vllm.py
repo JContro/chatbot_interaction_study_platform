@@ -10,6 +10,7 @@ vLLM API Reference: https://docs.vllm.ai/en/latest/serving/openai_compatible_ser
 """
 
 import logging
+import time
 from typing import Any, Dict, Iterator, Optional
 
 import requests
@@ -49,45 +50,76 @@ class VLLMAPI(BaseLLM):
         Unlike HuggingFaceLLM, this does NOT load any model locally.
         It only checks that the vLLM server is reachable and has the
         expected model available.
+
+        Retries with exponential backoff to handle the case where the
+        vLLM server is still starting up (e.g. loading the model, capturing
+        CUDA graphs) when this method is first called.
         """
         if self._initialized:
             return
 
-        # Check server health and model availability
-        try:
-            # Try to get model info - vLLM provides this via /v1/models
-            response = requests.get(
-                f"{self.api_base}/v1/models",
-                timeout=10,
-                headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
-            )
-            response.raise_for_status()
-            models = response.json().get("data", [])
-            model_ids = [m.get("id") for m in models]
+        max_retries = self.config.get("init_max_retries", 30)
+        base_delay = self.config.get("init_base_delay", 2.0)
+        max_delay = self.config.get("init_max_delay", 30.0)
 
-            logger.info(
-                "Connected to vLLM server at '%s'. Available models: %s",
-                self.api_base,
-                model_ids,
-            )
+        last_exception = None
 
-            # Optionally verify the configured model is available
-            if self.model_name not in model_ids:
-                logger.warning(
-                    "Model '%s' not found in vLLM server models: %s. "
-                    "Proceeding anyway - the server may still serve it.",
-                    self.model_name,
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Try to get model info - vLLM provides this via /v1/models
+                response = requests.get(
+                    f"{self.api_base}/v1/models",
+                    timeout=10,
+                    headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
+                )
+                response.raise_for_status()
+                models = response.json().get("data", [])
+                model_ids = [m.get("id") for m in models]
+
+                logger.info(
+                    "Connected to vLLM server at '%s'. Available models: %s",
+                    self.api_base,
                     model_ids,
                 )
 
-            self._initialized = True
+                # Optionally verify the configured model is available
+                if self.model_name not in model_ids:
+                    logger.warning(
+                        "Model '%s' not found in vLLM server models: %s. "
+                        "Proceeding anyway - the server may still serve it.",
+                        self.model_name,
+                        model_ids,
+                    )
 
-        except requests.exceptions.RequestException as e:
-            logger.error("Failed to connect to vLLM server at '%s': %s", self.api_base, e)
-            raise RuntimeError(
-                f"Cannot connect to vLLM server at {self.api_base}. "
-                "Please ensure the vLLM server is running."
-            ) from e
+                self._initialized = True
+                return
+
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                if attempt < max_retries:
+                    # Exponential backoff: 2s, 4s, 8s, ... capped at max_delay
+                    delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+                    logger.warning(
+                        "vLLM server not ready yet (attempt %d/%d): %s. "
+                        "Retrying in %.1fs ...",
+                        attempt,
+                        max_retries,
+                        e,
+                        delay,
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        "Failed to connect to vLLM server at '%s' after %d attempts: %s",
+                        self.api_base,
+                        max_retries,
+                        e,
+                    )
+
+        raise RuntimeError(
+            f"Cannot connect to vLLM server at {self.api_base} after {max_retries} "
+            f"retries. Please ensure the vLLM server is running."
+        ) from last_exception
 
     def generate(
         self,

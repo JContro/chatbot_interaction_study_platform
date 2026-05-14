@@ -406,6 +406,19 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    {% if risks %}
+    <nav class="claude-nav">
+        <div class="container-fluid">
+            <div class="d-flex align-items-center">
+                <span class="text-muted me-3">Risks:</span>
+                {% for risk in risks %}
+                    <span class="badge bg-secondary me-2">{{ risk }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+    
     {% if messages %}
         <div class="container mt-3">
             {% for message in messages %}
