@@ -12,6 +12,8 @@ packages unless this backend is actually configured.
 
 import gc
 import logging
+import os
+import time
 from typing import Any, Dict, Iterator, Optional
 
 from .base import BaseLLM, ConversationHistory, GenerationParams
@@ -55,6 +57,7 @@ class HuggingFaceLLM(BaseLLM):
         if self._initialized:
             return
 
+        _t0 = time.time()
         try:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -76,6 +79,78 @@ class HuggingFaceLLM(BaseLLM):
                 torch_dtype = torch.float32
             else:
                 torch_dtype = torch.float16
+
+            logger.info(
+                "Loading model '%s' on device '%s' (dtype=%s, quantization=%s) …",
+                self.model_name,
+                self.device,
+                torch_dtype,
+                quantization,
+            )
+
+            # Debug: check cache status
+            if cache_dir:
+                model_cache_path = os.path.join(cache_dir, f"models--{self.model_name.replace('/', '--')}")
+                if os.path.isdir(model_cache_path):
+                    total_size = 0
+                    file_count = 0
+                    for root, dirs, files in os.walk(model_cache_path):
+                        for f in files:
+                            fp = os.path.join(root, f)
+                            if os.path.isfile(fp):
+                                sz = os.path.getsize(fp)
+                                total_size += sz
+                                file_count += 1
+                    logger.info(
+                        "CACHE CHECK: model '%s' found in cache at %s — %d files, %.2f GB total",
+                        self.model_name, model_cache_path, file_count, total_size / (1024**3),
+                    )
+                    # List shard file sizes
+                    snapshots_dir = os.path.join(model_cache_path, "snapshots")
+                    if os.path.isdir(snapshots_dir):
+                        snapshots = sorted(os.listdir(snapshots_dir))
+                        if snapshots:
+                            snap_dir = os.path.join(snapshots_dir, snapshots[-1])
+                            logger.info("CACHE CHECK: latest snapshot: %s", snapshots[-1])
+                            for f in sorted(os.listdir(snap_dir)):
+                                fp = os.path.join(snap_dir, f)
+                                if os.path.isfile(fp):
+                                    logger.info("  %-70s %8.2f MB", f, os.path.getsize(fp) / (1024**2))
+                else:
+                    logger.warning(
+                        "CACHE MISS: model '%s' NOT found in cache at %s",
+                        self.model_name, model_cache_path,
+                    )
+            else:
+                logger.warning("No cache_dir configured — model will be downloaded every time.")
+
+            logger.info("Loading tokenizer for '%s' …", self.model_name)
+            _t1 = time.time()
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                cache_dir=cache_dir,
+            )
+            logger.info("Tokenizer loaded in %.1f s", time.time() - _t1)
+
+            # Resolve dtype
+            dtype_str = self.config.get("torch_dtype", None)
+            if dtype_str:
+                torch_dtype = getattr(torch, dtype_str)
+            elif self.device == "cpu":
+                torch_dtype = torch.float32
+            else:
+                torch_dtype = torch.float16
+
+            # Debug: log memory before loading
+            if torch.cuda.is_available():
+                free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()
+                logger.info(
+                    "GPU memory BEFORE model load: allocated=%.2f GB, reserved=%.2f GB, free=%.2f GB / %.2f GB total",
+                    torch.cuda.memory_allocated() / (1024**3),
+                    torch.cuda.memory_reserved() / (1024**3),
+                    free_mem / (1024**3),
+                    torch.cuda.get_device_properties(0).total_memory / (1024**3),
+                )
 
             logger.info(
                 "Loading model '%s' on device '%s' (dtype=%s, quantization=%s) …",
@@ -109,38 +184,53 @@ class HuggingFaceLLM(BaseLLM):
                 logger.info("Applying BitsAndBytes 8-bit quantization to model '%s' …", self.model_name)
                 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
                 model_kwargs["quantization_config"] = bnb_config
+            else:
+                logger.warning("NO QUANTIZATION applied — loading full-precision model (may be very large/slow)")
 
             # Apply Flash Attention 2 if specified
             use_flash_attention_2 = self.config.get("use_flash_attention_2", False)
             if use_flash_attention_2 and self.device != "cpu":
                 logger.info("Enabling Flash Attention 2 for model '%s' …", self.model_name)
-                # Use attn_implementation for newer transformers (>4.36)
-                # Note: Flash Attention 2 has a head_dim limit of 256; some models (e.g. Gemma 4)
-                # may hit this limit at runtime. If so, disable flash attention for this model.
                 model_kwargs["attn_implementation"] = "flash_attention_2"
 
-            # When device == 'auto' let accelerate handle placement;
-            # otherwise load on CPU first then move.
+            # Use device_map to load directly to the target device,
+            # avoiding an extra CPU-staging copy across the bus.
             if self.device == "auto":
                 model_kwargs["device_map"] = "auto"
             else:
-                model_kwargs["device_map"] = None  # Will move manually below
+                model_kwargs["device_map"] = None  # Load to CPU first, then move
 
+            _t2 = time.time()
             self._model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 **model_kwargs,
             )
+            logger.info("Model weights loaded from disk in %.1f s", time.time() - _t2)
 
             if self.device != "auto":
+                _t3 = time.time()
                 self._model = self._model.to(self.device)
+                logger.info("Model moved to %s in %.1f s", self.device, time.time() - _t3)
+
+            # Debug: log memory after loading
+            if torch.cuda.is_available():
+                logger.info(
+                    "GPU memory AFTER model load: allocated=%.2f GB, reserved=%.2f GB",
+                    torch.cuda.memory_allocated() / (1024**3),
+                    torch.cuda.memory_reserved() / (1024**3),
+                )
 
             self._model.eval()
             self._initialized = True
-            logger.info("Model '%s' ready.", self.model_name)
+            logger.info(
+                "Model '%s' ready — total init time: %.1f s",
+                self.model_name, time.time() - _t0,
+            )
 
         except Exception:
+            elapsed = time.time() - _t0
             logger.exception(
-                "Failed to initialise model '%s'", self.model_name)
+                "Failed to initialise model '%s' after %.1f s", self.model_name, elapsed)
             raise
 
     def generate(
@@ -333,19 +423,20 @@ class HuggingFaceLLM(BaseLLM):
             "past_key_values": past_key_values,
         }
 
-        # Run generation in a separate thread
-        with torch.no_grad():
-            thread = Thread(
-                target=self._model.generate,
-                kwargs=generation_kwargs
-            )
-            thread.start()
+        # Run generation in a separate thread (torch.no_grad inside the thread
+        # so the generator yielding is not wrapped by the context manager).
+        def _generate_thread():
+            with torch.no_grad():
+                self._model.generate(**generation_kwargs)
 
-            # Yield tokens as they come from the streamer
-            for text in streamer:
-                yield text
+        thread = Thread(target=_generate_thread)
+        thread.start()
 
-            thread.join()
+        # Yield tokens as they come from the streamer
+        for text in streamer:
+            yield text
+
+        thread.join()
 
     def _build_system_prompt(
         self,
@@ -359,7 +450,7 @@ class HuggingFaceLLM(BaseLLM):
         if not topic_data or not assigned_stance:
             return ""
 
-        stance_info = topic_data.get('stances', {}).get(assigned_stance, {})
+        stance_info = topic_data.get('stances', {}).get(assigned_stance, "")
         if not stance_info:
             return ""
 
@@ -370,10 +461,8 @@ class HuggingFaceLLM(BaseLLM):
             "",
             f"Your assigned stance is: {assigned_stance.upper()}",
             "",
-            "Your perspective positions:",
-            f"- PRO (supporting): {stance_info.get('pro', 'Not available')}",
-            f"- CON (opposing): {stance_info.get('con', 'Not available')}",
-            f"- NEUTRAL (balanced): {stance_info.get('neutral', 'Not available')}",
+            "Your perspective:",
+            f"{stance_info}",
             "",
             "Instructions:",
             f"- Adopt the {assigned_stance} perspective in your responses",

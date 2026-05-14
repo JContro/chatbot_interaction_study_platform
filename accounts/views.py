@@ -670,10 +670,13 @@ def chat_api_stream_view(request):
                              request.user.email)
             yield json.dumps({"error": "The model encountered an error generating a response."})
 
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         generate(),
-        content_type="text/event-stream"
+        content_type="text/event-stream",
     )
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
 
 
 @login_required

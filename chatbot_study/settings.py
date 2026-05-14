@@ -202,7 +202,7 @@ else:
         # "use_flash_attention_2": False,
         "device": os.getenv("LLM_DEVICE", "cuda"),
         # Torch dtype: 'float32' | 'float16' | 'bfloat16'
-        "dtype": os.getenv("LLM_TORCH_DTYPE", "float16"),
+        "torch_dtype": os.getenv("LLM_TORCH_DTYPE", "float16"),
         # Quantization: 'bnb_4bit' | 'bnb_8bit' | None
         "quantization": os.getenv("LLM_QUANTIZATION", "bnb_4bit"),
         # Cache directory for downloaded models (stored in workspace for fast loading)
@@ -217,3 +217,40 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
 
 # Risks list for display in header
 RISKS = ['Data Privacy', 'Security Breach', 'Compliance Risk', 'Reputational Risk']
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname:7s} {name:45s} {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "accounts": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+        "transformers": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

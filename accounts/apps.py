@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import threading
 
 from django.apps import AppConfig
 
@@ -10,16 +11,20 @@ logger = logging.getLogger(__name__)
 def _preload_llm() -> None:
     """
     Pre-warm the LLM so the first HTTP request is not penalised by model
-    loading time.  Runs synchronously to ensure model is loaded before server starts.
+    loading time.  Runs in a daemon thread so the server can start serving
+    immediately while the model loads in the background.
     """
+    import time
+    _t0 = time.time()
     try:
         logger.info("LLM pre-load: starting …")
         from accounts.llm.registry import get_llm
         get_llm()
-        logger.info("LLM pre-load: complete.")
+        logger.info("LLM pre-load: complete in %.1f s.", time.time() - _t0)
     except Exception:
         logger.exception(
-            "LLM pre-load failed – model will be loaded on the first request instead."
+            "LLM pre-load failed after %.1f s – model will be loaded on the first request instead.",
+            time.time() - _t0,
         )
 
 
@@ -31,9 +36,11 @@ class AccountsConfig(AppConfig):
         """
         Called by Django once the application registry is fully populated.
 
-        We start a background thread to load the LLM so that:
-          - The web server is not blocked during startup.
+        Pre-loads the LLM in a daemon thread so that:
+          - The web server is not blocked during startup (no 10-min wait).
           - The first HTTP request does not pay the full model-load penalty.
+          - If the model hasn't finished loading by the first request,
+            get_llm() will block until it does.
 
         Guard rails:
           - Skip for management commands that don't serve HTTP (migrate, etc.)
@@ -57,5 +64,6 @@ class AccountsConfig(AppConfig):
         if "runserver" in sys.argv and os.environ.get("RUN_MAIN") != "true":
             return
 
-        # Load LLM synchronously at startup to avoid first-request latency
-        _preload_llm()
+        # Load LLM in the background so the server starts immediately
+        thread = threading.Thread(target=_preload_llm, daemon=True)
+        thread.start()
