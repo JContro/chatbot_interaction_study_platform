@@ -127,6 +127,8 @@ class VLLMAPI(BaseLLM):
         conversation_history: Optional[ConversationHistory] = None,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -141,6 +143,8 @@ class VLLMAPI(BaseLLM):
             conversation_history=conversation_history,
             topic_data=topic_data,
             assigned_stance=assigned_stance,
+            user_stance_ratings=user_stance_ratings,
+            custom_system_prompt=custom_system_prompt,
             **kwargs,
         ))
         return "".join(chunks)
@@ -151,6 +155,8 @@ class VLLMAPI(BaseLLM):
         conversation_history: Optional[ConversationHistory] = None,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
         **kwargs,
     ) -> Iterator[str]:
         """
@@ -163,7 +169,7 @@ class VLLMAPI(BaseLLM):
             self.initialize()
 
         # Build system prompt with topic and stance info
-        system_prompt = self._build_system_prompt(topic_data, assigned_stance)
+        system_prompt = self._build_system_prompt(topic_data, assigned_stance, user_stance_ratings, custom_system_prompt)
 
         # Build the message list for the API
         messages = self._build_messages(prompt, conversation_history, system_prompt)
@@ -252,31 +258,67 @@ class VLLMAPI(BaseLLM):
         self,
         topic_data: Optional[Dict[str, Any]],
         assigned_stance: Optional[str],
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
     ) -> Optional[str]:
         """
         Build a system prompt incorporating topic and stance information.
 
+        When user_stance_ratings are provided, includes info about which
+        stance the user most agrees with. When custom_system_prompt is
+        provided, it is appended to the prompt.
+
         Returns None if neither topic_data nor assigned_stance is provided.
         """
+        # Fall back to file-level custom system prompt if not passed directly
+        if not custom_system_prompt:
+            from .custom_prompt import CUSTOM_SYSTEM_PROMPT as _csp
+            custom_system_prompt = _csp
         if not topic_data and not assigned_stance:
-            return None
+            return custom_system_prompt or None
 
-        parts = []
+        # Data points for system prompt interpolation
+        _question = topic_data.get("specific_question", "") if topic_data else ""
+        _area = topic_data.get("topic_area", "") if topic_data else ""
+        _stance_text = topic_data.get("stances", {}).get(assigned_stance, "") if topic_data and assigned_stance else ""
+        _pro_rating = None
+        _con_rating = None
+        _neutral_rating = None
+        _preferred = None
+        if user_stance_ratings:
+            _preferred = user_stance_ratings.get("preferred_stance")
+            _pro_rating = user_stance_ratings.get("pro")
+            _con_rating = user_stance_ratings.get("con")
+            _neutral_rating = user_stance_ratings.get("neutral")
 
-        if topic_data:
-            topic_title = topic_data.get("title", "")
-            topic_description = topic_data.get("description", "")
-            if topic_title:
-                parts.append(f"Topic: {topic_title}")
-            if topic_description:
-                parts.append(f"Description: {topic_description}")
+        _ratings_block = ""
+        if user_stance_ratings and any(
+            user_stance_ratings.get(s) for s in ("pro", "con", "neutral")
+        ):
+            _ratings_block = f"""
+User's pre-conversation stance ratings (1-5 scale):
+- Pro: {_pro_rating or 'N/A'}/5
+- Con: {_con_rating or 'N/A'}/5
+- Neutral: {_neutral_rating or 'N/A'}/5"""
+            if _preferred:
+                _ratings_block += f"\n\nNote: The user most agrees with the {_preferred.upper()} position on this topic."
 
-        if assigned_stance:
-            parts.append(
-                f"You are taking the perspective of someone with a '{assigned_stance}' stance on this topic."
-            )
+        _custom_block = ""
+        if custom_system_prompt:
+            _custom_block = f"""
 
-        return "\n\n".join(parts)
+Additional instructions:
+{custom_system_prompt}"""
+
+        return f"""Topic: {_question}
+Topic Area: {_area}
+
+Your assigned stance is: {assigned_stance.upper() if assigned_stance else 'N/A'}
+
+Your perspective: {_stance_text}
+{_ratings_block}
+
+You are taking the perspective of someone with a '{assigned_stance}' stance on this topic. Be engaging, thoughtful, and true to your assigned stance.{_custom_block}"""
 
     def _build_messages(
         self,

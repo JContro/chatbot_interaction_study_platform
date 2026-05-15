@@ -18,6 +18,9 @@ urlpatterns = [
     path('chat/api/annotation/', views.annotation_api_view,
          name='annotation_api'),
     path('analysis/<int:topic_id>/', views.analysis_view, name='analysis'),
+    # Review conversations
+    path('review/', views.review_view, name='review'),
+    path('review/<int:topic_id>/', views.review_view, name='review_topic'),
     path('verify-email/<uuid:token>/',
          views.verify_email_view, name='verify_email'),
     path('password-reset/request/', views.password_reset_request_view,

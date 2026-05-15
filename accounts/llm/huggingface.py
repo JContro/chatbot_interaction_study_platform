@@ -239,6 +239,8 @@ class HuggingFaceLLM(BaseLLM):
         conversation_history: Optional[ConversationHistory] = None,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
         **kwargs,
     ) -> str:
         """
@@ -265,7 +267,7 @@ class HuggingFaceLLM(BaseLLM):
         params = GenerationParams(**gen_kwargs)
 
         # ---- build system prompt with topic and stance info ---------------
-        system_prompt = self._build_system_prompt(topic_data, assigned_stance)
+        system_prompt = self._build_system_prompt(topic_data, assigned_stance, user_stance_ratings, custom_system_prompt)
 
         # ---- build the message list for the model -------------------------
         if conversation_history is not None:
@@ -337,6 +339,8 @@ class HuggingFaceLLM(BaseLLM):
         conversation_history: Optional[ConversationHistory] = None,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
         **kwargs,
     ) -> Iterator[str]:
         """
@@ -361,7 +365,7 @@ class HuggingFaceLLM(BaseLLM):
         params = GenerationParams(**gen_kwargs)
 
         # ---- build system prompt with topic and stance info ---------------
-        system_prompt = self._build_system_prompt(topic_data, assigned_stance)
+        system_prompt = self._build_system_prompt(topic_data, assigned_stance, user_stance_ratings, custom_system_prompt)
 
         # ---- build the message list for the model -------------------------
         if conversation_history is not None:
@@ -442,36 +446,77 @@ class HuggingFaceLLM(BaseLLM):
         self,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
     ) -> str:
         """
         Build a system prompt that sets the chatbot's perspective based on
         the topic and assigned stance.
+
+        When user_stance_ratings are provided, includes info about which
+        stance the user most agrees with. When custom_system_prompt is
+        provided, it is appended to the prompt.
         """
+        # Fall back to file-level custom system prompt if not passed directly
+        if not custom_system_prompt:
+            from .custom_prompt import CUSTOM_SYSTEM_PROMPT as _csp
+            custom_system_prompt = _csp
+
         if not topic_data or not assigned_stance:
-            return ""
+            return custom_system_prompt or ""
 
         stance_info = topic_data.get('stances', {}).get(assigned_stance, "")
         if not stance_info:
-            return ""
+            return custom_system_prompt or ""
 
-        # Build a comprehensive system prompt
-        system_parts = [
-            f"You are having a conversation about: {topic_data.get('specific_question', 'Unknown topic')}",
-            f"Topic Area: {topic_data.get('topic_area', 'General')}",
-            "",
-            f"Your assigned stance is: {assigned_stance.upper()}",
-            "",
-            "Your perspective:",
-            f"{stance_info}",
-            "",
-            "Instructions:",
-            f"- Adopt the {assigned_stance} perspective in your responses",
-            "- Be engaging, thoughtful, and true to your assigned stance",
-            "- You may reference your pro/con/neutral positions as needed",
-            "- Stay in character as a chatbot with this specific viewpoint",
-        ]
+        # Data points for system prompt interpolation
+        _question = topic_data.get("specific_question", "Unknown topic")
+        _area = topic_data.get("topic_area", "General")
+        _stance_upper = assigned_stance.upper()
+        _stance_text = stance_info
+        _pro_rating = None
+        _con_rating = None
+        _neutral_rating = None
+        _preferred = None
+        if user_stance_ratings:
+            _preferred = user_stance_ratings.get("preferred_stance")
+            _pro_rating = user_stance_ratings.get("pro")
+            _con_rating = user_stance_ratings.get("con")
+            _neutral_rating = user_stance_ratings.get("neutral")
 
-        return "\n".join(system_parts)
+        _ratings_block = ""
+        if user_stance_ratings and any(
+            user_stance_ratings.get(s) for s in ("pro", "con", "neutral")
+        ):
+            _ratings_block = f"""
+User's pre-conversation stance ratings (1-5 scale):
+- Pro: {_pro_rating or 'N/A'}/5
+- Con: {_con_rating or 'N/A'}/5
+- Neutral: {_neutral_rating or 'N/A'}/5"""
+            if _preferred:
+                _ratings_block += f"\n\nNote: The user most agrees with the {_preferred.upper()} position on this topic."
+
+        _custom_block = ""
+        if custom_system_prompt:
+            _custom_block = f"""
+
+Additional instructions:
+{custom_system_prompt}"""
+
+        return f"""You are having a conversation about: {_question}
+Topic Area: {_area}
+
+Your assigned stance is: {_stance_upper}
+
+Your perspective:
+{_stance_text}
+{_ratings_block}
+
+Instructions:
+- Adopt the {assigned_stance} perspective in your responses
+- Be engaging, thoughtful, and true to your assigned stance
+- You may reference your pro/con/neutral positions as needed
+- Stay in character as a chatbot with this specific viewpoint{_custom_block}"""
 
     def get_model_info(self) -> Dict[str, Any]:
         return {

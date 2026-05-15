@@ -3,12 +3,16 @@
 {% block title %}Chat - Chatbot Study{% endblock %}
 
 {% block content %}
-<div class="chat-container" 
+<div class="chat-container"
      data-topic-id="{{ topic_id }}"
      data-assigned-stance="{{ assigned_stance }}"
      data-stance-pro="{{ stance_pro|escapejs }}"
      data-stance-con="{{ stance_con|escapejs }}"
-     data-stance-neutral="{{ stance_neutral|escapejs }}">
+     data-stance-neutral="{{ stance_neutral|escapejs }}"
+     data-stance-rating-pro="{{ stance_rating_pro|default:'' }}"
+     data-stance-rating-con="{{ stance_rating_con|default:'' }}"
+     data-stance-rating-neutral="{{ stance_rating_neutral|default:'' }}"
+     data-preferred-stance="{{ preferred_stance|default:'' }}">
     <!-- Header -->
     <nav class="d-flex justify-content-between align-items-center py-3 mb-3" style="border-bottom: 1px solid var(--claude-border);">
         <div class="d-flex align-items-center gap-3">
@@ -29,6 +33,9 @@
         <div class="d-flex align-items-center gap-3">
             <a href="{% url 'topic_selection' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
                 <i class="bi bi-arrow-left"></i> Topics
+            </a>
+            <a href="{% url 'review' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-journal-text"></i> Review
             </a>
             {% if user.is_staff %}
             <a href="{% url 'admin_conversations' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;" title="Admin Panel" target="_blank">
@@ -116,6 +123,18 @@
     const STANCE_PRO = chatContainer ? chatContainer.dataset.stancePro : '';
     const STANCE_CON = chatContainer ? chatContainer.dataset.stanceCon : '';
     const STANCE_NEUTRAL = chatContainer ? chatContainer.dataset.stanceNeutral : '';
+
+    // Stance rating data
+    const STANCE_RATING_PRO = chatContainer ? chatContainer.dataset.stanceRatingPro || null : null;
+    const STANCE_RATING_CON = chatContainer ? chatContainer.dataset.stanceRatingCon || null : null;
+    const STANCE_RATING_NEUTRAL = chatContainer ? chatContainer.dataset.stanceRatingNeutral || null : null;
+    const PREFERRED_STANCE = chatContainer ? chatContainer.dataset.preferredStance || null : null;
+
+    const userStanceRatings = {};
+    if (STANCE_RATING_PRO) userStanceRatings.pro = parseInt(STANCE_RATING_PRO, 10);
+    if (STANCE_RATING_CON) userStanceRatings.con = parseInt(STANCE_RATING_CON, 10);
+    if (STANCE_RATING_NEUTRAL) userStanceRatings.neutral = parseInt(STANCE_RATING_NEUTRAL, 10);
+    if (PREFERRED_STANCE) userStanceRatings.preferred_stance = PREFERRED_STANCE;
 
     const history = [];
 
@@ -341,6 +360,7 @@
                     topic_id: TOPIC_ID,
                     assigned_stance: ASSIGNED_STANCE,
                     history: history,
+                    user_stance_ratings: Object.keys(userStanceRatings).length > 0 ? userStanceRatings : undefined,
                 }),
             });
 

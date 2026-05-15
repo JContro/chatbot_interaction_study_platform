@@ -106,6 +106,8 @@ class BaseLLM(ABC):
         conversation_history: Optional[ConversationHistory] = None,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -116,6 +118,9 @@ class BaseLLM(ABC):
             conversation_history: Optional conversation history for context
             topic_data: Optional topic data dictionary containing topic info
             assigned_stance: Optional stance type (e.g., 'conservative')
+            user_stance_ratings: Optional dict with user's stance ratings
+                (e.g. {'pro': 4, 'con': 2, 'neutral': 1, 'preferred_stance': 'pro'})
+            custom_system_prompt: Optional custom system prompt text
             **kwargs: Additional generation parameters (temperature, max_tokens, etc.)
 
         Returns:
@@ -130,6 +135,8 @@ class BaseLLM(ABC):
         conversation_history: Optional[ConversationHistory] = None,
         topic_data: Optional[Dict[str, Any]] = None,
         assigned_stance: Optional[str] = None,
+        user_stance_ratings: Optional[Dict[str, Any]] = None,
+        custom_system_prompt: Optional[str] = None,
         **kwargs
     ) -> Iterator[str]:
         """

@@ -15,6 +15,9 @@
         </a>
         <div class="d-flex align-items-center gap-3">
             <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
+            <a href="{% url 'review' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-journal-text"></i> Review
+            </a>
             <a href="{% url 'topic_selection' %}" class="claude-btn btn-sm" style="text-decoration: none;">
                 <i class="bi bi-plus-circle"></i> New Chat
             </a>
@@ -32,43 +35,49 @@
     
     {# Conversation History #}
     {% if conversation_history %}
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <p class="text-muted mb-0" style="font-size: 14px;">
+                {{ total_conversations }} conversation{{ total_conversations|pluralize }}
+                {% if has_more %}
+                &mdash; showing the {{ conversation_history|length }} most recent
+                {% endif %}
+            </p>
+            <a href="{% url 'review' %}" class="claude-btn-outline btn-sm" style="text-decoration: none;">
+                <i class="bi bi-journal-text"></i> View All in Review
+            </a>
+        </div>
+
         <div class="row justify-content-center g-4">
             {% for conv in conversation_history %}
             <div class="col-md-6 col-lg-5">
-                <div class="claude-card h-100 p-4">
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <span class="badge" style="background-color: var(--claude-green); color: #18191b; font-size: 11px; font-weight: 600;">
-                            {{ conv.topic_area }}
-                        </span>
-                        <span class="text-muted" style="font-size: 12px;">
-                            {{ conv.completed_at|date:"M d, Y" }}
-                        </span>
-                    </div>
-                    <h4 class="mb-3" style="font-size: 1rem; font-weight: 600; color: var(--claude-text);">
-                        {{ conv.specific_question }}
-                    </h4>
-                    <div class="d-flex gap-3" style="font-size: 12px;">
-                        <div>
-                            <span class="text-muted">Pro:</span>
-                            <span style="color: var(--claude-green); font-weight: 600;">{{ conv.pro_rating }}/5</span>
+                <a href="{% url 'review_topic' conv.topic_id %}" style="text-decoration: none; color: inherit; display: block;">
+                    <div class="claude-card h-100 p-4" style="cursor: pointer; transition: border-color 0.15s ease;" onmouseover="this.style.borderColor='var(--claude-accent)'" onmouseout="this.style.borderColor=''">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <span class="badge" style="background-color: var(--claude-green); color: #18191b; font-size: 11px; font-weight: 600;">
+                                {{ conv.topic_area }}
+                            </span>
+                            <span class="text-muted" style="font-size: 12px;">
+                                {{ conv.completed_at|date:"M d, Y" }}
+                            </span>
                         </div>
-                        <div>
-                            <span class="text-muted">Con:</span>
-                            <span style="color: var(--claude-red); font-weight: 600;">{{ conv.con_rating }}/5</span>
-                        </div>
-                        <div>
-                            <span class="text-muted">Neutral:</span>
-                            <span style="color: var(--claude-text-muted); font-weight: 600;">{{ conv.neutral_rating }}/5</span>
+                        <h4 class="mb-3" style="font-size: 1rem; font-weight: 600; color: var(--claude-text);">
+                            {{ conv.specific_question }}
+                        </h4>
+                        <div style="font-size: 12px; color: var(--claude-text-muted);">
+                            {{ conv.message_count }} message{{ conv.message_count|pluralize }}
                         </div>
                     </div>
-                </div>
+                </a>
             </div>
             {% endfor %}
         </div>
-        
-        <div class="text-center mt-5">
+
+        <div class="text-center mt-5 d-flex justify-content-center gap-3">
             <a href="{% url 'topic_selection' %}" class="claude-btn" style="text-decoration: none;">
                 <i class="bi bi-plus-circle"></i> Start New Conversation
+            </a>
+            <a href="{% url 'review' %}" class="claude-btn-outline" style="text-decoration: none;">
+                <i class="bi bi-journal-text"></i> View All Conversations
             </a>
         </div>
     {% else %}

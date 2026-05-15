@@ -27,30 +27,40 @@ def home_view(request):
     For authenticated users, shows conversation history.
     """
     if request.user.is_authenticated:
-        # Get user's completed conversations (topics with post-conversation stance ratings)
-        completed_conversations = StanceRating.objects.filter(
-            user=request.user,
-            rating_type='post'
-        ).select_related('user').order_by('-created_at')
-        
-        # Group by topic to get unique conversations
+        # Get all conversations this user has participated in
+        user_conversation_ids = ConversationMessage.objects.filter(
+            user=request.user
+        ).values_list('conversation', flat=True).distinct()
+
+        conversations_qs = Conversation.objects.filter(id__in=user_conversation_ids)
+        total_count = conversations_qs.count()
+
+        # Build conversation metadata
         conversation_history = []
-        seen_topics = set()
-        for rating in completed_conversations:
-            if rating.topic_id not in seen_topics:
-                seen_topics.add(rating.topic_id)
-                conversation_history.append({
-                    'topic_id': rating.topic_id,
-                    'topic_area': rating.topic_area,
-                    'specific_question': rating.specific_question,
-                    'completed_at': rating.created_at,
-                    'pro_rating': rating.pro_rating,
-                    'con_rating': rating.con_rating,
-                    'neutral_rating': rating.neutral_rating,
-                })
-        
+        for conv in conversations_qs:
+            topic_data = get_topic_by_id(int(conv.topic))
+            last_message = ConversationMessage.objects.filter(
+                user=request.user, conversation=conv
+            ).last()
+            message_count = ConversationMessage.objects.filter(
+                user=request.user, conversation=conv
+            ).count()
+            conversation_history.append({
+                'topic_id': conv.topic,
+                'topic_area': topic_data['topic_area'] if topic_data else 'Unknown',
+                'specific_question': topic_data['specific_question'] if topic_data else '',
+                'completed_at': last_message.created_at if last_message else None,
+                'message_count': message_count,
+            })
+
+        # Sort by most recent, limit to 5 on home page
+        conversation_history.sort(key=lambda c: c['completed_at'] or timezone.datetime.min, reverse=True)
+        limited_history = conversation_history[:5]
+
         return render(request, 'accounts/home.html', {
-            'conversation_history': conversation_history,
+            'conversation_history': limited_history,
+            'total_conversations': total_count,
+            'has_more': total_count > 5,
             'is_authenticated': True
         })
     return render(request, 'accounts/home.html', {
@@ -373,7 +383,24 @@ def chat_view(request, topic_id=None):
 
     # Get user's pre-conversation stance ratings (if any)
     stance_rating = StanceRating.objects.filter(
-        user=request.user, topic_id=topic_id).first()
+        user=request.user, topic_id=topic_id, rating_type='pre').first()
+
+    # Compute the user's preferred stance (the one with the highest rating)
+    preferred_stance = None
+    stance_ratings_dict = {}
+    if stance_rating:
+        ratings = {
+            'pro': stance_rating.pro_rating,
+            'con': stance_rating.con_rating,
+            'neutral': stance_rating.neutral_rating,
+        }
+        stance_ratings_dict = ratings
+        # Find the stance with the max rating (ties broken by order: pro, con, neutral)
+        max_rating = max(ratings.values())
+        for stance in ['pro', 'con', 'neutral']:
+            if ratings[stance] == max_rating:
+                preferred_stance = stance
+                break
 
     # Create a context with all the necessary information
     chat_context = {
@@ -385,7 +412,10 @@ def chat_view(request, topic_id=None):
         'stance_pro': topic_data['stances']['pro'],
         'stance_con': topic_data['stances']['con'],
         'stance_neutral': topic_data['stances']['neutral'],
-        'stance_rating': stance_rating,
+        'stance_rating_pro': stance_ratings_dict.get('pro'),
+        'stance_rating_con': stance_ratings_dict.get('con'),
+        'stance_rating_neutral': stance_ratings_dict.get('neutral'),
+        'preferred_stance': preferred_stance,
     }
 
     return render(request, 'accounts/chat.html', chat_context)
@@ -489,6 +519,7 @@ def chat_api_view(request):
         return JsonResponse({"error": "Invalid or missing stance."}, status=400)
 
     raw_history = body.get("history", [])   # list of {role, content} dicts
+    user_stance_ratings = body.get("user_stance_ratings")
 
     # -- call LLM ------------------------------------------------------------
     try:
@@ -512,6 +543,7 @@ def chat_api_view(request):
             conversation_history=history,
             topic_data=topic_data,
             assigned_stance=assigned_stance,
+            user_stance_ratings=user_stance_ratings,
         )
 
         # Save messages to database
@@ -613,6 +645,7 @@ def chat_api_stream_view(request):
         )
 
     raw_history = body.get("history", [])
+    user_stance_ratings = body.get("user_stance_ratings")
 
     # -- generator function for streaming ------------------------------------
     def generate():
@@ -650,6 +683,7 @@ def chat_api_stream_view(request):
                 conversation_history=history,
                 topic_data=topic_data,
                 assigned_stance=assigned_stance,
+                user_stance_ratings=user_stance_ratings,
             ):
                 full_response += token
                 yield f"data: {json.dumps({'token': token})}\n\n"
@@ -880,6 +914,77 @@ def annotation_api_view(request):
             {"error": f"Failed to process annotation: {str(e)}"},
             status=500,
         )
+
+
+@login_required
+def review_view(request, topic_id=None):
+    """
+    Review view - shows all user conversations in a sidebar
+    and a selected conversation in split-screen (conversation on left, annotations on right).
+    """
+    # Check if user's email is verified
+    if not request.user.is_email_verified:
+        messages.warning(
+            request, 'Please verify your email address to access this page.')
+        logout(request)
+        return redirect('login')
+
+    # Get all conversations for this user
+    user_conversation_ids = ConversationMessage.objects.filter(
+        user=request.user
+    ).values_list('conversation', flat=True).distinct()
+
+    conversations_list = Conversation.objects.filter(id__in=user_conversation_ids)
+
+    # Build conversation metadata for sidebar
+    conversation_meta = []
+    for conv in conversations_list:
+        topic_data = get_topic_by_id(int(conv.topic))
+        message_count = ConversationMessage.objects.filter(
+            user=request.user, conversation=conv
+        ).count()
+        last_message = ConversationMessage.objects.filter(
+            user=request.user, conversation=conv
+        ).last()
+        conversation_meta.append({
+            'topic_id': conv.topic,
+            'topic_area': topic_data['topic_area'] if topic_data else 'Unknown',
+            'specific_question': topic_data['specific_question'] if topic_data else '',
+            'message_count': message_count,
+            'last_message_at': last_message.created_at if last_message else None,
+        })
+
+    # Sort by most recent first
+    conversation_meta.sort(key=lambda c: c['last_message_at'] or timezone.datetime.min, reverse=True)
+
+    # If a specific conversation is selected, load its data
+    chat_messages = None
+    annotations = None
+    selected_topic_data = None
+
+    if topic_id is not None:
+        topic_data = get_topic_by_id(int(topic_id))
+        if topic_data:
+            conversation = Conversation.objects.filter(topic=topic_id).first()
+            if conversation:
+                chat_messages = ConversationMessage.objects.filter(
+                    user=request.user,
+                    conversation=conversation
+                ).order_by('created_at')
+
+                annotations = MessageAnnotation.objects.filter(
+                    message__conversation=conversation
+                ).select_related('message', 'user').order_by('created_at')
+
+                selected_topic_data = topic_data
+
+    return render(request, 'accounts/review.html', {
+        'conversations_list': conversation_meta,
+        'selected_topic_id': topic_id,
+        'selected_topic': selected_topic_data,
+        'chat_messages': chat_messages,
+        'annotations': annotations,
+    })
 
 
 @login_required
