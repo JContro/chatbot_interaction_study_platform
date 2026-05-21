@@ -49,33 +49,20 @@
         </div>
     </nav>
 
-    <!-- Stance Info Banner -->
     {% if assigned_stance %}
-    <div class="stance-banner mb-3" style="background: linear-gradient(135deg, rgba(212, 165, 116, 0.1) 0%, rgba(212, 165, 116, 0.05) 100%); border: 1px solid var(--claude-accent); border-radius: 8px; padding: 12px 16px;">
-        <div class="d-flex align-items-center gap-2 mb-2">
-            <i class="bi bi-person-badge" style="color: var(--claude-accent);"></i>
-            <span style="font-weight: 600; color: var(--claude-text);">Chatbot Stance:</span>
-            <span class="badge" style="background-color: var(--claude-accent); color: #18191b;">{{ assigned_stance|title }}</span>
-        </div>
-        <div class="stance-positions" style="font-size: 13px; color: var(--claude-text-light);">
-            <div class="mb-1"><strong>Pro:</strong> {{ stance_pro }}</div>
-            <div class="mb-1"><strong>Con:</strong> {{ stance_con }}</div>
-            <div><strong>Neutral:</strong> {{ stance_neutral }}</div>
-        </div>
-    </div>
+    <script>
+        console.log('=== Chatbot Stance Info ===');
+        console.log('Assigned Stance:', '{{ assigned_stance|escapejs }}');
+        console.log('Pro:', '{{ stance_pro|escapejs }}');
+        console.log('Con:', '{{ stance_con|escapejs }}');
+        console.log('Neutral:', '{{ stance_neutral|escapejs }}');
+        console.log('===========================');
+    </script>
     {% endif %}
 
     <!-- Chat Messages -->
     <div id="chat-messages" class="chat-messages mb-3">
-        <!-- Welcome Message -->
-        <div class="message-wrapper assistant">
-            <div class="avatar avatar-assistant me-3">
-                <i class="bi bi-robot"></i>
-            </div>
-            <div class="message-assistant">
-                <p class="mb-2">Hello! I'm here to discuss <strong>{{ specific_question }}</strong> with you.</p>
-            </div>
-        </div>
+        <!-- First message will be loaded by the LLM on page load -->
     </div>
 
     <!-- Input Area -->
@@ -440,6 +427,92 @@
 
     // Auto-focus the input on page load.
     messageInput.focus();
+
+    // -----------------------------------------------------------------------
+    // Load LLM-generated first message on page load
+    // -----------------------------------------------------------------------
+    (async function loadFirstMessage() {
+        showTypingIndicator();
+        setInputEnabled(false);
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    message: '',
+                    topic_id: TOPIC_ID,
+                    assigned_stance: ASSIGNED_STANCE,
+                    history: [],
+                    is_first_message: true,
+                }),
+            });
+
+            removeTypingIndicator();
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                appendErrorMessage(data.error || 'Failed to start conversation.');
+                return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let assistantText = '';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'message-wrapper assistant';
+            wrapper.innerHTML = `
+                <div class="avatar avatar-assistant me-3"><i class="bi bi-robot"></i></div>
+                <div class="message-assistant"><p class="mb-0 streaming-text"></p></div>
+            `;
+            chatMessages.appendChild(wrapper);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            const streamingEl = wrapper.querySelector('.streaming-text');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.token) {
+                                assistantText += data.token;
+                                streamingEl.textContent = stripThinkBlocks(assistantText);
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                            if (data.error) {
+                                appendErrorMessage(data.error);
+                                wrapper.remove();
+                                return;
+                            }
+                        } catch (e) {
+                            // Skip invalid JSON lines
+                        }
+                    }
+                }
+            }
+
+            history.push({ role: 'assistant', content: assistantText });
+
+        } catch (err) {
+            removeTypingIndicator();
+            appendErrorMessage('Network error – could not load conversation starter.');
+            console.error('First message error:', err);
+        } finally {
+            setInputEnabled(true);
+            messageInput.focus();
+        }
+    })();
 })();
 </script>
 {% endblock %}

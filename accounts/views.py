@@ -583,16 +583,20 @@ def chat_api_stream_view(request):
     Streaming JSON API endpoint: receive a user message + conversation history,
     stream the LLM's reply using Server-Sent Events.
 
-    Request body (JSON) - same as chat_api_view:
+    Request body (JSON):
         {
             "message": "<user text>",
             "topic_id": "<topic ID (1-20)>",
-            "assigned_stance": "<stance type (e.g., conservative)>",
+            "assigned_stance": "<stance type>",
             "history": [
                 {"role": "user",      "content": "..."},
                 {"role": "assistant", "content": "..."}
-            ]
+            ],
+            "is_first_message": true   // optional — generate LLM opening message
         }
+
+    When is_first_message is true, no user message is saved; the LLM generates
+    an opening statement about the topic as the first assistant message.
 
     Response: Server-Sent Events stream where each event is:
         data: {"token": "<token text>"}
@@ -611,13 +615,19 @@ def chat_api_stream_view(request):
             content_type="application/json"
         )
 
-    user_message = body.get("message", "").strip()
-    if not user_message:
-        return StreamingHttpResponse(
-            iter([json.dumps({"error": "Message cannot be empty."})]),
-            status=400,
-            content_type="application/json"
-        )
+    is_first_message = body.get("is_first_message", False)
+
+    if is_first_message:
+        # Opening message — no user message required
+        user_message = body.get("message", "").strip()
+    else:
+        user_message = body.get("message", "").strip()
+        if not user_message:
+            return StreamingHttpResponse(
+                iter([json.dumps({"error": "Message cannot be empty."})]),
+                status=400,
+                content_type="application/json"
+            )
 
     topic_id = body.get("topic_id", "").strip()
     if not topic_id:
@@ -661,25 +671,33 @@ def chat_api_stream_view(request):
                 if role and content:
                     history.add_message(role, content)
 
-            history.add_user_message(user_message)
-
             llm = get_llm()
             full_response = ""
 
-            # Save messages to database
             conversation, _ = Conversation.objects.get_or_create(topic=topic_id)
 
-            # Save user message
-            ConversationMessage.objects.create(
-                user=request.user,
-                conversation=conversation,
-                role='user',
-                content=user_message
-            )
+            if is_first_message:
+                # Generate an opening message — save assistant message only
+                prompt = (
+                    f"Start the conversation about this topic in a natural, "
+                    f"engaging way. Introduce your perspective as {assigned_stance} "
+                    f"on the question: \"{topic_data['specific_question']}\". "
+                    f"Keep it concise — just a sentence or two to get the discussion going."
+                )
+            else:
+                # Save user message
+                history.add_user_message(user_message)
+                ConversationMessage.objects.create(
+                    user=request.user,
+                    conversation=conversation,
+                    role='user',
+                    content=user_message
+                )
+                prompt = user_message
 
             # Stream tokens as they come
             for token in llm.generate_stream(
-                prompt=user_message,
+                prompt=prompt,
                 conversation_history=history,
                 topic_data=topic_data,
                 assigned_stance=assigned_stance,
