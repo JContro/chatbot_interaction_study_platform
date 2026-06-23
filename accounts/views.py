@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
 from .models import User, Conversation, ConversationMessage, MessageAnnotation, StanceRating
+from . import study_flow as flow
 from .utils import send_verification_email, verify_email, send_password_reset_email
 from .topics_data import (
     CONVERSATION_TOPICS, get_topic_areas, get_topics_by_area,
@@ -89,7 +90,7 @@ def login_view(request):
                     return render(request, 'accounts/login.html', {'form': form})
                 login(request, user)
                 messages.success(request, f'Welcome back!')
-                return redirect('topic_selection')
+                return redirect(flow.post_login_redirect(user))
             else:
                 messages.error(request, 'Invalid email or password.')
         else:
@@ -239,12 +240,11 @@ def topic_selection_view(request):
     """
     View for selecting a conversation topic.
     """
-    # Check if user's email is verified before allowing access
-    if not request.user.is_email_verified:
-        messages.warning(
-            request, 'Please verify your email address to access the chat.')
-        logout(request)
-        return redirect('login')
+    # Gate: route the user to the correct stage of the study if they're not
+    # supposed to be on this page.
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
 
     # Get all unique topic areas
     topic_areas = get_topic_areas()
@@ -283,12 +283,11 @@ def stance_rating_view(request, topic_id=None, rating_type='pre'):
     Survey view - collects Likert scale ratings for each stance.
     Can be pre-conversation (before chat) or post-conversation (after chat).
     """
-    # Check if user's email is verified before allowing access
-    if not request.user.is_email_verified:
-        messages.warning(
-            request, 'Please verify your email address to access the chat.')
-        logout(request)
-        return redirect('login')
+    # Gate: route the user to the correct stage of the study if they're not
+    # supposed to be on this page.
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
 
     # If no topic is selected, redirect to topic selection
     if topic_id is None:
@@ -360,12 +359,11 @@ def chat_view(request, topic_id=None):
     """
     Main chat view - the main application page.
     """
-    # Check if user's email is verified before allowing access
-    if not request.user.is_email_verified:
-        messages.warning(
-            request, 'Please verify your email address to access the chat.')
-        logout(request)
-        return redirect('login')
+    # Gate: route the user to the correct stage of the study if they're not
+    # supposed to be on this page.
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
 
     # If no topic is selected, redirect to topic selection
     if topic_id is None:
@@ -427,12 +425,11 @@ def analysis_view(request, topic_id):
     Analysis view - displays the conversation with annotation capabilities.
     Shows chat history on the left and analysis panel on the right.
     """
-    # Check if user's email is verified before allowing access
-    if not request.user.is_email_verified:
-        messages.warning(
-            request, 'Please verify your email address to access the analysis.')
-        logout(request)
-        return redirect('login')
+    # Gate: route the user to the correct stage of the study if they're not
+    # supposed to be on this page.
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
 
     # Get the topic data
     topic_data = get_topic_by_id(int(topic_id))
@@ -940,12 +937,11 @@ def review_view(request, topic_id=None):
     Review view - shows all user conversations in a sidebar
     and a selected conversation in split-screen (conversation on left, annotations on right).
     """
-    # Check if user's email is verified
-    if not request.user.is_email_verified:
-        messages.warning(
-            request, 'Please verify your email address to access this page.')
-        logout(request)
-        return redirect('login')
+    # Gate: route the user to the correct stage of the study if they're not
+    # supposed to be on this page.
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
 
     # Get all conversations for this user
     user_conversation_ids = ConversationMessage.objects.filter(
