@@ -2,7 +2,7 @@ import json
 import logging
 import random
 
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect, get_object_or_404, reverse
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -11,15 +11,22 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
-from .models import User, Conversation, ConversationMessage, MessageAnnotation, StanceRating
+from .models import User, Conversation, ConversationMessage, MessageAnnotation, StanceRating, InstrumentResponse
 from . import study_flow as flow
 from .utils import send_verification_email, verify_email, send_password_reset_email
 from .topics_data import (
     CONVERSATION_TOPICS, get_topic_areas, get_topics_by_area,
     get_topic_by_id, get_all_stance_types
 )
+from .instruments_data import INSTRUMENT_ORDER, get_instrument, instrument_item_count
+from . import baseline_battery
 
 logger = logging.getLogger(__name__)
+
+# Fixed attention-check insertion points (PRD: hardcoded fixed positions).
+# Re-exposed here so the positions are visible/documented next to the views
+# that consume them; the authoritative constant lives in baseline_battery.
+BASELINE_ATTENTION_CHECK_POSITIONS = baseline_battery.ATTENTION_CHECK_AFTER
 
 
 def home_view(request):
@@ -1246,3 +1253,322 @@ Provide a thoughtful, objective analysis focusing on research-relevant observati
             {"error": f"Failed to generate analysis: {str(e)}"},
             status=500,
         )
+
+
+# ---------------------------------------------------------------------------
+# Baseline psych battery — participant-facing survey views.
+#
+# Flow: baseline_intro (instructions + Start) -> baseline_survey (the one-item-
+# at-a-time JS survey) -> on completion topic_selection; on attention-check
+# failure baseline_failed (terminal). Per-keypress AJAX saves hit
+# baseline_save / baseline_undo / baseline_fail.
+#
+# Page-rendering views (intro / survey / failed) consult flow.gate so the
+# declarative flow module stays the single source of truth for routing. The
+# JSON API endpoints (start / save / undo / fail) are exempt from the gate:
+# the gate redirects incomplete users to baseline_intro, which would break
+# in-flight AJAX saves from a legitimately mid-survey participant. They do
+# their own lightweight state handling instead.
+# ---------------------------------------------------------------------------
+
+# Letters used for attention-check prompts. Restricted to clearly distinct
+# uppercase letters (no 1-5 lookalikes) to keep the keypress semantics crisp.
+_ATTENTION_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXZ"
+
+
+def _random_attention_letters():
+    """Return a list of 3 random uppercase letters for this render."""
+    import secrets
+    return [secrets.choice(_ATTENTION_LETTERS)
+            for _ in range(baseline_battery.ATTENTION_CHECK_COUNT)]
+
+
+def _battery_resume_index(user):
+    """Return the 0-based frame index at which ``user`` should resume.
+
+    The resume frame is the frame immediately after the highest-index answered
+    item frame. Because the survey is forward-only, answered item frames form a
+    prefix, so this realizes "resume position = highest saved item_index + 1"
+    per instrument. Using "last answered frame + 1" (rather than "first
+    unsaved item frame") also re-asks an attention check that immediately
+    follows the last answered item, so a participant cannot refresh-skip an
+    attention check they had not yet reached. Returns 0 if nothing has been
+    answered yet.
+    """
+    frames = baseline_battery.build_battery_frames(
+        _random_attention_letters())
+    answered = set(
+        InstrumentResponse.objects.filter(
+            user=user,
+            instrument_slug__in=INSTRUMENT_ORDER,
+        ).values_list("instrument_slug", "item_index")
+    )
+    last_answered_frame = -1
+    for i, frame in enumerate(frames):
+        if frame["type"] == "item" and (
+                frame["slug"], frame["item_index"]) in answered:
+            last_answered_frame = i
+    if last_answered_frame == -1:
+        return 0
+    resume = last_answered_frame + 1
+    if resume >= len(frames):
+        resume = len(frames) - 1
+    return resume
+
+
+@login_required
+def baseline_intro_view(request):
+    """
+    Baseline battery intro page: merged BFI-2-S + IDAS-R instructions and a
+    Start button. A completed participant is bounced to topic_selection; the
+    gate sends terminal participants to baseline_failed.
+    """
+    user = request.user
+    if user.has_completed_baseline():
+        return redirect("topic_selection")
+
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
+
+    instruments = [get_instrument(slug) for slug in INSTRUMENT_ORDER]
+    return render(request, "accounts/baseline_intro.html", {
+        "instruments": instruments,
+    })
+
+
+@login_required
+@require_POST
+def baseline_start_view(request):
+    """
+    Mark the battery as started (set baseline_started_at if unset) and tell
+    the client where to go next. JSON endpoint (exempt from gate).
+    """
+    user = request.user
+    if user.baseline_is_terminal():
+        return JsonResponse({"ok": False, "redirect": reverse("baseline_failed")})
+    if user.has_completed_baseline():
+        return JsonResponse({"ok": True, "redirect": reverse("topic_selection")})
+
+    if not user.baseline_started_at:
+        user.baseline_started_at = timezone.now()
+        user.save(update_fields=["baseline_started_at"])
+
+    return JsonResponse({"ok": True, "redirect": reverse("baseline_survey")})
+
+
+@login_required
+def baseline_survey_view(request):
+    """
+    The one-item-at-a-time JS survey. Renders the flattened frame list (with
+    per-render random attention-check letters) plus the resume index.
+
+    Gate handling:
+      * completed  -> topic_selection
+      * terminal   -> baseline_failed (via gate)
+      * not started -> baseline_intro
+    """
+    user = request.user
+    if user.has_completed_baseline():
+        return redirect("topic_selection")
+
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
+
+    if not user.baseline_started_at:
+        return redirect("baseline_intro")
+
+    letters = _random_attention_letters()
+    frames = baseline_battery.build_battery_frames(letters)
+    resume_index = _battery_resume_index(user)
+    frames_json = json.dumps(frames)
+
+    return render(request, "accounts/baseline_survey.html", {
+        "frames_json": frames_json,
+        "resume_index": resume_index,
+        "save_url": reverse("baseline_save"),
+        "undo_url": reverse("baseline_undo"),
+        "fail_url": reverse("baseline_fail"),
+        "total_frames": len(frames),
+    })
+
+
+@login_required
+@require_POST
+def baseline_save_view(request):
+    """
+    Persist one 1-5 response (update_or_create on user, slug, item_index).
+    JSON endpoint (exempt from gate). If this save completes the entire
+    battery (the last IDAS-R item), mark the participant completed and
+    return a redirect to topic_selection.
+
+    Request: {"slug", "item_index", "value"}.
+    Response: {"ok", "complete", "battery_complete"[, "redirect"]}.
+    """
+    user = request.user
+    if user.baseline_is_terminal():
+        return JsonResponse({"ok": False, "redirect": reverse("baseline_failed")})
+    if user.has_completed_baseline():
+        return JsonResponse({
+            "ok": True, "complete": True, "battery_complete": True,
+            "redirect": reverse("topic_selection"),
+        })
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."},
+                            status=400)
+
+    slug = data.get("slug")
+    item_index = data.get("item_index")
+    value = data.get("value")
+    if not slug or item_index is None or value is None:
+        return JsonResponse(
+            {"ok": False, "error": "Missing slug, item_index, or value."},
+            status=400)
+    if slug not in INSTRUMENT_ORDER:
+        return JsonResponse({"ok": False, "error": "Unknown instrument slug."},
+                            status=400)
+    try:
+        item_index = int(item_index)
+        value = int(value)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"ok": False, "error": "item_index and value must be integers."},
+            status=400)
+    if value < 1 or value > 5:
+        return JsonResponse(
+            {"ok": False, "error": "value must be between 1 and 5."},
+            status=400)
+
+    InstrumentResponse.objects.update_or_create(
+        user=user, instrument_slug=slug, item_index=item_index,
+        defaults={"value": value},
+    )
+
+    instrument_complete = (
+        InstrumentResponse.objects.filter(user=user, instrument_slug=slug)
+        .count() >= instrument_item_count(slug)
+    )
+
+    # Battery is complete only when the final instrument's final item is saved.
+    last_slug = INSTRUMENT_ORDER[-1]
+    last_count = instrument_item_count(last_slug)
+    battery_complete = (
+        slug == last_slug
+        and InstrumentResponse.objects.filter(
+            user=user, instrument_slug=last_slug).count() >= last_count
+    )
+
+    response = {
+        "ok": True,
+        "complete": instrument_complete,
+        "battery_complete": battery_complete,
+    }
+    if battery_complete:
+        user.baseline_status = "completed"
+        user.baseline_completed_at = timezone.now()
+        user.save(update_fields=["baseline_status", "baseline_completed_at"])
+        response["redirect"] = reverse("topic_selection")
+    return JsonResponse(response)
+
+
+@login_required
+@require_POST
+def baseline_undo_view(request):
+    """
+    Delete the response row for (slug, item_index) so the same item is
+    re-asked. JSON endpoint (exempt from gate). Forward-only design: Undo is
+    only available within the 10-second window for the just-answered item.
+
+    Request: {"slug", "item_index"}. Response: {"ok"}.
+    """
+    user = request.user
+    if user.baseline_is_terminal():
+        return JsonResponse({"ok": False, "redirect": reverse("baseline_failed")})
+    if user.has_completed_baseline():
+        return JsonResponse({"ok": True, "completed": True})
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."},
+                            status=400)
+
+    slug = data.get("slug")
+    item_index = data.get("item_index")
+    if not slug or item_index is None:
+        return JsonResponse(
+            {"ok": False, "error": "Missing slug or item_index."},
+            status=400)
+
+    try:
+        item_index = int(item_index)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"ok": False, "error": "item_index must be an integer."},
+            status=400)
+
+    InstrumentResponse.objects.filter(
+        user=user, instrument_slug=slug, item_index=item_index,
+    ).delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def baseline_fail_view(request):
+    """
+    Record an attention-check failure and end the run. Idempotent: a terminal
+    user stays terminal. The first failure is the only one recorded.
+
+    Request: {"item_index", "keystroke"}.
+    Response: {"ok", "redirect": baseline_failed}.
+    """
+    user = request.user
+    if user.baseline_is_terminal():
+        return JsonResponse({"ok": True, "redirect": reverse("baseline_failed")})
+    if user.has_completed_baseline():
+        return JsonResponse({"ok": True, "redirect": reverse("topic_selection")})
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."},
+                            status=400)
+
+    item_index = data.get("item_index")
+    keystroke = str(data.get("keystroke", ""))[:20]
+    if item_index is None:
+        return JsonResponse({"ok": False, "error": "Missing item_index."},
+                            status=400)
+    try:
+        item_index = int(item_index)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"ok": False, "error": "item_index must be an integer."},
+            status=400)
+
+    user.baseline_status = "attention_failed"
+    user.baseline_failed_item_index = item_index
+    user.baseline_failed_keystroke = keystroke
+    user.save(update_fields=[
+        "baseline_status", "baseline_failed_item_index",
+        "baseline_failed_keystroke",
+    ])
+    return JsonResponse({"ok": True, "redirect": reverse("baseline_failed")})
+
+
+@login_required
+def baseline_failed_view(request):
+    """
+    Terminal shutdown page for participants who failed an attention check.
+    Generic message with no hint of which check or how many. The gate sends
+    terminal users here and exempts this URL from redirect loops.
+    """
+    gate = flow.gate(request)
+    if gate is not None:
+        return gate
+    return render(request, "accounts/baseline_failed.html")

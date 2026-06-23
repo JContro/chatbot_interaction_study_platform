@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Survey ended - Chatbot Study{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 600px; margin: 0 auto; padding: 60px 20px; text-align: center;">
+    <div class="claude-card">
+        <div style="font-size: 2.5rem; margin-bottom: 12px;">
+            <i class="bi bi-exclamation-circle" style="color: var(--claude-text-muted);"></i>
+        </div>
+        <h1 style="font-size: 1.4rem; font-weight: 600; margin-bottom: 16px;">
+            Unfortunately it looks like you're not paying attention&hellip;
+        </h1>
+        <p style="color: var(--claude-text); margin-bottom: 8px;">
+            The background survey has ended and cannot be continued.
+        </p>
+        <p class="text-muted" style="margin-bottom: 24px;">
+            If you believe this was a mistake, please contact the study
+            coordinator.
+        </p>
+        <a href="{% url 'logout' %}" class="claude-btn-outline" style="text-decoration: none;">
+            <i class="bi bi-box-arrow-right"></i> Sign out
+        </a>
+    </div>
+</div>
+{% endblock %}

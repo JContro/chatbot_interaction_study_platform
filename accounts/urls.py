@@ -29,6 +29,14 @@ urlpatterns = [
          name='password_reset_done'),
     path('password-reset/<uuid:token>/',
          views.password_reset_confirm_view, name='password_reset_confirm'),
+    # Baseline psych battery
+    path('baseline/', views.baseline_intro_view, name='baseline_intro'),
+    path('baseline/start/', views.baseline_start_view, name='baseline_start'),
+    path('baseline/survey/', views.baseline_survey_view, name='baseline_survey'),
+    path('baseline/save/', views.baseline_save_view, name='baseline_save'),
+    path('baseline/undo/', views.baseline_undo_view, name='baseline_undo'),
+    path('baseline/fail/', views.baseline_fail_view, name='baseline_fail'),
+    path('baseline/failed/', views.baseline_failed_view, name='baseline_failed'),
     # Admin views
     path('study-admin/conversations/', views.admin_conversations_view,
          name='admin_conversations'),
