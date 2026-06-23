@@ -222,6 +222,31 @@ class StanceRating(models.Model):
         return f"Stance ratings by {self.user.email} on '{self.specific_question[:50]}...'"
 
 
+class InstrumentResponse(models.Model):
+    """
+    A single 1-5 response to one item of a psychological instrument (BFI-2-S,
+    IDAS-R, or a future third instrument). Generic by design: instrument is
+    identified by a slug whose definition lives in accounts.instruments_data,
+    so adding an instrument requires no schema migration.
+    """
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='instrument_responses')
+    instrument_slug = models.CharField(max_length=50)
+    item_index = models.IntegerField(help_text="1-based index of the item within the instrument")
+    value = models.IntegerField(help_text="The 1-5 response value")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'instrument_slug', 'item_index')
+        ordering = ['instrument_slug', 'item_index']
+        indexes = [
+            models.Index(fields=['user', 'instrument_slug']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} / {self.instrument_slug} item {self.item_index} = {self.value}"
+
+
 class UserManager(BaseUserManager):
     """Custom manager for User model that uses email instead of username."""
 
@@ -263,8 +288,34 @@ class User(AbstractUser):
         default=uuid.uuid4, editable=False, null=True, blank=True)
     password_reset_sent_at = models.DateTimeField(null=True, blank=True)
 
+    # Baseline psych battery fields
+    BASELINE_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('attention_failed', 'Attention Failed'),
+        ('abandoned', 'Abandoned'),
+    ]
+    baseline_status = models.CharField(
+        max_length=20, default='pending', choices=BASELINE_STATUS_CHOICES)
+    baseline_started_at = models.DateTimeField(null=True, blank=True)
+    baseline_completed_at = models.DateTimeField(null=True, blank=True)
+    baseline_failed_item_index = models.IntegerField(
+        null=True, blank=True,
+        help_text="The instrument item index (global battery position) at which the attention check was failed.")
+    baseline_failed_keystroke = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="The key the participant pressed to fail the attention check.")
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
     def __str__(self):
         return self.email
+
+    def has_completed_baseline(self):
+        """True if the baseline psych battery is complete (gate for the rest of the study)."""
+        return self.baseline_status == 'completed'
+
+    def baseline_is_terminal(self):
+        """True if the participant is in a terminal (non-completable) baseline state."""
+        return self.baseline_status == 'attention_failed'
