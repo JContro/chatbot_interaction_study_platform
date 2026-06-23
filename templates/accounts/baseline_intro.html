@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}Baseline Survey - Chatbot Study{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 760px; margin: 0 auto; padding: 40px 20px;">
+    <div class="claude-card">
+        <h1 style="font-size: 1.6rem; font-weight: 600; margin-bottom: 8px;">
+            Before we begin: a short background survey
+        </h1>
+        <p class="text-muted" style="margin-bottom: 24px;">
+            This should take about 5&ndash;7 minutes. You will answer one
+            statement at a time using the number keys
+            <strong>1&ndash;5</strong> on your keyboard.
+        </p>
+
+        <div style="border-top: 1px solid var(--claude-border); padding-top: 20px; margin-bottom: 20px;">
+            {% for instrument in instruments %}
+            <div class="mb-4">
+                <h2 style="font-size: 1.1rem; font-weight: 600; color: var(--claude-accent); margin-bottom: 6px;">
+                    {{ instrument.name }}
+                </h2>
+                <p style="color: var(--claude-text); margin-bottom: 10px;">
+                    {{ instrument.instruction }}
+                </p>
+                <p class="text-muted" style="font-size: 13px; margin-bottom: 0;">
+                    {{ instrument.items|length }} items &middot; 1&ndash;5 scale
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="alert alert-info" style="margin-bottom: 24px;">
+            <strong>Please note:</strong> the survey is forward-only &mdash;
+            you cannot go back to change an earlier answer, though you will
+            have a brief <strong>10-second Undo</strong> window after each
+            response. Please pay close attention; occasional checks will
+            confirm you are reading each statement.
+        </div>
+
+        <form id="baseline-start-form" method="post">
+            {% csrf_token %}
+            <button type="submit" id="start-btn" class="claude-btn" style="width: 100%; padding: 14px 20px; font-size: 16px;">
+                <i class="bi bi-play-fill"></i> Start Survey
+            </button>
+        </form>
+        <div id="start-error" style="display:none; color: var(--claude-red); margin-top: 12px; font-size: 14px;"></div>
+    </div>
+
+    <div class="text-center mt-3">
+        <a href="{% url 'logout' %}" class="claude-link" style="font-size: 13px;">Sign out</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+
+    const form = document.getElementById('baseline-start-form');
+    const startBtn = document.getElementById('start-btn');
+    const errorEl = document.getElementById('start-error');
+
+    function getCsrfToken() {
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (input) return input.value;
+        const name = 'csrftoken';
+        for (let cookie of document.cookie.split(';')) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                return decodeURIComponent(cookie.slice(name.length + 1));
+            }
+        }
+        return '';
+    }
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Starting&hellip;';
+        errorEl.style.display = 'none';
+        try {
+            const response = await fetch("{% url 'baseline_start' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCsrfToken() },
+            });
+            const data = await response.json();
+            if (data.ok && data.redirect) {
+                window.location.href = data.redirect;
+            } else {
+                throw new Error(data.error || 'Could not start the survey.');
+            }
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.style.display = 'block';
+            startBtn.disabled = false;
+            startBtn.innerHTML = '<i class="bi bi-play-fill"></i> Start Survey';
+        }
+    });
+})();
+</script>
+{% endblock %}

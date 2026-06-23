@@ -1,0 +1,597 @@
+{% extends 'base.html' %}
+
+{% block title %}Baseline Survey - Chatbot Study{% endblock %}
+
+{% block extra_css %}
+<style>
+    .survey-container {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 20px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .survey-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--claude-border);
+    }
+
+    .survey-logo {
+        color: var(--claude-accent);
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+        margin-bottom: 24px;
+    }
+    .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--claude-text-muted);
+        margin-bottom: 6px;
+    }
+    .progress-track {
+        height: 6px;
+        background-color: var(--claude-border);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%;
+        background-color: var(--claude-accent);
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.35s ease;
+    }
+
+    /* The frame card */
+    .frame-card {
+        background-color: var(--claude-surface);
+        border: 1px solid var(--claude-border);
+        border-radius: 14px;
+        padding: 40px 32px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        transition: opacity 0.28s ease, transform 0.28s ease;
+    }
+    .frame-card.transitioning {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    .frame-card.shake {
+        animation: shake 0.32s ease;
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-8px); }
+        40% { transform: translateX(8px); }
+        60% { transform: translateX(-6px); }
+        80% { transform: translateX(6px); }
+    }
+
+    .frame-instrument-tag {
+        font-size: 12px;
+        color: var(--claude-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 18px;
+    }
+
+    .frame-text {
+        font-size: 1.5rem;
+        line-height: 1.45;
+        color: var(--claude-text);
+        margin-bottom: 30px;
+        font-weight: 500;
+    }
+
+    .frame-prompt {
+        font-size: 1.7rem;
+        line-height: 1.4;
+        color: var(--claude-accent);
+        margin-bottom: 30px;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    /* Scale options (item frames) */
+    .scale-options {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+    .scale-option {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 16px;
+        background-color: var(--claude-bg);
+        border: 1px solid var(--claude-border);
+        border-radius: 8px;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .scale-option:hover {
+        border-color: var(--claude-accent);
+        background-color: var(--claude-surface-hover);
+    }
+    .scale-key {
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background-color: var(--claude-accent-subtle);
+        color: var(--claude-accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    .scale-label {
+        color: var(--claude-text);
+        font-size: 14px;
+    }
+
+    /* Hint line */
+    .frame-hint {
+        text-align: center;
+        color: var(--claude-text-muted);
+        font-size: 13px;
+        margin-top: 6px;
+    }
+    .frame-hint kbd {
+        background-color: var(--claude-bg);
+        border: 1px solid var(--claude-border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-size: 12px;
+        color: var(--claude-text);
+        font-family: inherit;
+    }
+
+    /* Attention target badge */
+    .attention-letter {
+        font-size: 3.5rem;
+        font-weight: 700;
+        color: var(--claude-accent);
+        text-align: center;
+        margin: 6px 0 18px;
+        letter-spacing: 0.08em;
+    }
+
+    /* Undo toast / banner */
+    .undo-banner {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: var(--claude-surface);
+        border: 1px solid var(--claude-border);
+        border-radius: 10px;
+        padding: 12px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+        z-index: 1000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .undo-banner.visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .undo-banner-text {
+        font-size: 14px;
+        color: var(--claude-text);
+    }
+    .undo-banner-count {
+        color: var(--claude-text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+    .undo-btn {
+        background-color: var(--claude-accent);
+        color: #18191b;
+        border: none;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 13px;
+        cursor: pointer;
+    }
+    .undo-btn:hover {
+        background-color: var(--claude-accent-hover);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="survey-container"
+     id="survey-root"
+     data-frames="{{ frames_json|escapejs }}"
+     data-resume-index="{{ resume_index }}"
+     data-save-url="{{ save_url }}"
+     data-undo-url="{{ undo_url }}"
+     data-fail-url="{{ fail_url }}"
+     data-total-frames="{{ total_frames }}">
+    {% csrf_token %}
+
+    <div class="survey-header">
+        <div class="survey-logo"><i class="bi bi-clipboard-check"></i> Baseline Survey</div>
+        <span class="text-muted" style="font-size: 13px;">{{ user.email }}</span>
+    </div>
+
+    <div class="progress-wrap">
+        <div class="progress-meta">
+            <span id="progress-label">Item 1 of {{ total_frames }}</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+    </div>
+
+    <div class="frame-card" id="frame-card">
+        <!-- Frame content rendered by JS -->
+    </div>
+</div>
+
+<div class="undo-banner" id="undo-banner">
+    <span class="undo-banner-text">Answer saved. Undo?</span>
+    <span class="undo-banner-count" id="undo-count">10</span>
+    <button type="button" class="undo-btn" id="undo-btn">Undo</button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+
+    const root = document.getElementById('survey-root');
+    const FRAMES = JSON.parse(root.dataset.frames);
+    const SAVE_URL = root.dataset.saveUrl;
+    const UNDO_URL = root.dataset.undoUrl;
+    const FAIL_URL = root.dataset.failUrl;
+    const TOTAL = parseInt(root.dataset.totalFrames, 10) || FRAMES.length;
+    const RESUME_INDEX = parseInt(root.dataset.resumeIndex, 10) || 0;
+
+    const card = document.getElementById('frame-card');
+    const progressFill = document.getElementById('progress-fill');
+    const progressLabel = document.getElementById('progress-label');
+    const progressPercent = document.getElementById('progress-percent');
+    const undoBanner = document.getElementById('undo-banner');
+    const undoBtn = document.getElementById('undo-btn');
+    const undoCountEl = document.getElementById('undo-count');
+
+    // State
+    let currentFrame = Math.min(RESUME_INDEX, FRAMES.length - 1);
+    if (currentFrame < 0) currentFrame = 0;
+    let locked = false;          // guards against double-presses during animation / undo window
+    let undoTimer = null;        // the 10-second countdown timer
+    let undoInterval = null;     // the 1-second display ticker
+    let undoSecondsLeft = 0;
+    let pendingItem = null;      // {slug, item_index} of the just-answered item available for undo
+
+    // -----------------------------------------------------------------------
+    // CSRF helper (mirrors chat.html: cookie first, then hidden input)
+    // -----------------------------------------------------------------------
+    function getCsrfToken() {
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                return decodeURIComponent(cookie.slice(name.length + 1));
+            }
+        }
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text)));
+        return div.innerHTML;
+    }
+
+    // -----------------------------------------------------------------------
+    // Progress
+    // -----------------------------------------------------------------------
+    function updateProgress() {
+        const position = currentFrame + 1;       // 1-based
+        const pct = Math.round((position / TOTAL) * 100);
+        progressFill.style.width = pct + '%';
+        progressPercent.textContent = pct + '%';
+        progressLabel.textContent = 'Item ' + position + ' of ' + TOTAL;
+    }
+
+    // -----------------------------------------------------------------------
+    // Rendering
+    // -----------------------------------------------------------------------
+    function renderFrame() {
+        const frame = FRAMES[currentFrame];
+        if (!frame) { return; }
+
+        if (frame.type === 'item') {
+            const scale = frame.scale_labels || {};
+            // scale labels come through as string keys "1".."5"
+            const ordered = ['1', '2', '3', '4', '5'];
+            const instrumentName = frame.slug === 'bfi_2_s' ? 'BFI-2-S'
+                                 : frame.slug === 'idas_r' ? 'IDAS-R'
+                                 : frame.slug;
+            let scaleHtml = '';
+            for (const key of ordered) {
+                const label = scale[key] != null ? scale[key] : '';
+                scaleHtml += `
+                    <div class="scale-option">
+                        <div class="scale-key">${escapeHtml(key)}</div>
+                        <div class="scale-label">${escapeHtml(label)}</div>
+                    </div>`;
+            }
+            card.innerHTML = `
+                <div class="frame-instrument-tag">${escapeHtml(instrumentName)} &middot; Item ${escapeHtml(frame.item_index)}</div>
+                <div class="frame-text">${escapeHtml(frame.text)}</div>
+                <div class="scale-options">${scaleHtml}</div>
+                <div class="frame-hint">Press <kbd>1</kbd>&ndash;<kbd>5</kbd> to answer</div>`;
+        } else if (frame.type === 'attention') {
+            const letter = (frame.target_letter || '').toUpperCase();
+            card.innerHTML = `
+                <div class="frame-instrument-tag">Attention Check</div>
+                <div class="frame-prompt">Press the letter <kbd style="font-size:1.4em;">${escapeHtml(letter)}</kbd></div>
+                <div class="attention-letter">${escapeHtml(letter)}</div>
+                <div class="frame-hint">Press the letter on your keyboard</div>`;
+        }
+        updateProgress();
+    }
+
+    // Animated transition between frames.
+    function transitionTo(newIndex, cb) {
+        if (newIndex < 0 || newIndex >= FRAMES.length) {
+            if (cb) cb();
+            return;
+        }
+        locked = true;
+        card.classList.add('transitioning');
+        setTimeout(function () {
+            currentFrame = newIndex;
+            renderFrame();
+            // force reflow so the transition replays
+            void card.offsetWidth;
+            card.classList.remove('transitioning');
+            locked = false;
+            if (cb) cb();
+        }, 220);
+    }
+
+    // -----------------------------------------------------------------------
+    // Undo banner (10-second window, item frames only)
+    // -----------------------------------------------------------------------
+    function clearUndo() {
+        if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+        if (undoInterval) { clearInterval(undoInterval); undoInterval = null; }
+        undoBanner.classList.remove('visible');
+        pendingItem = null;
+    }
+
+    function showUndo(slug, itemIndex) {
+        clearUndo();
+        pendingItem = { slug: slug, item_index: itemIndex };
+        undoSecondsLeft = 10;
+        undoCountEl.textContent = undoSecondsLeft;
+        undoBanner.classList.add('visible');
+
+        undoInterval = setInterval(function () {
+            undoSecondsLeft -= 1;
+            if (undoSecondsLeft <= 0) {
+                undoCountEl.textContent = '0';
+            } else {
+                undoCountEl.textContent = undoSecondsLeft;
+            }
+        }, 1000);
+
+        undoTimer = setTimeout(function () {
+            // 10s elapsed -> answer is final, advance to next frame.
+            clearUndo();
+            advanceAfterItem();
+        }, 10000);
+    }
+
+    undoBtn.addEventListener('click', function () {
+        if (!pendingItem) return;
+        const item = pendingItem;
+        // Lock during the undo round-trip.
+        locked = true;
+        fetch(UNDO_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({ slug: item.slug, item_index: item.item_index }),
+        }).then(function (r) { return r.json(); }).then(function () {
+            clearUndo();
+            // Re-ask the SAME item (stay on current frame).
+            locked = false;
+            // Subtle re-render to indicate the item is back.
+            card.classList.add('transitioning');
+            setTimeout(function () {
+                renderFrame();
+                void card.offsetWidth;
+                card.classList.remove('transitioning');
+            }, 160);
+        }).catch(function () {
+            locked = false;
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // Save an item response (optimistic advance handled by caller)
+    // -----------------------------------------------------------------------
+    function saveItem(slug, itemIndex, value) {
+        return fetch(SAVE_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({ slug: slug, item_index: itemIndex, value: value }),
+        }).then(function (r) { return r.json(); });
+    }
+
+    function failAttention(frameIndex, keystroke) {
+        return fetch(FAIL_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({ item_index: frameIndex, keystroke: keystroke }),
+        }).then(function (r) { return r.json(); });
+    }
+
+    // Advance to the next frame after an item's undo window closes.
+    function advanceAfterItem() {
+        const next = currentFrame + 1;
+        if (next >= FRAMES.length) {
+            // No more frames; nothing to do (completion handled by save response).
+            return;
+        }
+        transitionTo(next, function () {
+            // If the next frame is an attention check, ensure no undo banner lingers.
+            clearUndo();
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Item-frame key handler
+    // -----------------------------------------------------------------------
+    function handleItemKey(key) {
+        if (locked) return;
+        if (key < '1' || key > '5') return;
+        const frame = FRAMES[currentFrame];
+        if (!frame || frame.type !== 'item') return;
+
+        const value = parseInt(key, 10);
+        const slug = frame.slug;
+        const itemIndex = frame.item_index;
+
+        // Lock immediately so a second keypress within the window is ignored.
+        locked = true;
+
+        // Optimistic save; show undo banner regardless of network result.
+        saveItem(slug, itemIndex, value).then(function (data) {
+            if (data && data.battery_complete && data.redirect) {
+                clearUndo();
+                locked = true;
+                window.location.href = data.redirect;
+                return;
+            }
+            // Begin the 10-second undo window. Unlock so the Undo button can act;
+            // the window itself prevents new item keys via pendingItem state.
+            locked = false;
+            showUndo(slug, itemIndex);
+        }).catch(function () {
+            // On network failure, stay on the current item and let the user retry.
+            locked = false;
+            card.classList.add('shake');
+            setTimeout(function () { card.classList.remove('shake'); }, 320);
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Attention-frame key handler
+    // -----------------------------------------------------------------------
+    function handleAttentionKey(key) {
+        if (locked) return;
+        const frame = FRAMES[currentFrame];
+        if (!frame || frame.type !== 'attention') return;
+
+        const target = (frame.target_letter || '').toUpperCase();
+        const pressed = key.toUpperCase();
+
+        // A number 1..5 is an attention-check failure.
+        if (key >= '1' && key <= '5') {
+            locked = true;
+            failAttention(currentFrame, key).then(function (data) {
+                const redirect = (data && data.redirect) || '';
+                // Briefly show the next real item frame, then redirect after a
+                // 3-second grace window.
+                const next = currentFrame + 1;
+                if (next < FRAMES.length) {
+                    transitionTo(next, function () {
+                        setTimeout(function () {
+                            if (redirect) window.location.href = redirect;
+                        }, 3000);
+                    });
+                } else {
+                    setTimeout(function () {
+                        if (redirect) window.location.href = redirect;
+                    }, 3000);
+                }
+            }).catch(function () {
+                locked = false;
+            });
+            return;
+        }
+
+        // Correct target letter -> advance immediately, no undo.
+        if (pressed === target) {
+            const next = currentFrame + 1;
+            if (next >= FRAMES.length) { return; }
+            transitionTo(next, null);
+            return;
+        }
+
+        // Any other non-target, non-number letter -> stay (subtle shake, re-ask).
+        card.classList.add('shake');
+        setTimeout(function () { card.classList.remove('shake'); }, 320);
+    }
+
+    // -----------------------------------------------------------------------
+    // Global key handler
+    // -----------------------------------------------------------------------
+    document.addEventListener('keydown', function (e) {
+        // Ignore modifier-laden keystrokes so browser shortcuts pass through.
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+        const frame = FRAMES[currentFrame];
+        if (!frame) return;
+
+        const key = e.key;
+
+        if (frame.type === 'item') {
+            if (key >= '1' && key <= '5') {
+                e.preventDefault();
+                handleItemKey(key);
+            }
+            // Ignore all other keys on item frames.
+        } else if (frame.type === 'attention') {
+            // Single-character keys only.
+            if (key.length === 1) {
+                e.preventDefault();
+                handleAttentionKey(key);
+            }
+        }
+    });
+
+    // -----------------------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------------------
+    renderFrame();
+})();
+</script>
+{% endblock %}
