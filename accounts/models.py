@@ -319,3 +319,24 @@ class User(AbstractUser):
     def baseline_is_terminal(self):
         """True if the participant is in a terminal (non-completable) baseline state."""
         return self.baseline_status == 'attention_failed'
+
+    # -- Per-topic completion predicates -------------------------------------
+    # Referenced by name from accounts.study_flow. These are thin query
+    # wrappers — keep them simple. Conversation.topic is a CharField, so the
+    # int topic_id from the flow is compared as str(topic_id) (mirroring how
+    # chat_view passes topic_id to Conversation).
+
+    def has_completed_stance_pre(self, topic_id):
+        """True if the pre-conversation stance rating exists for this topic."""
+        return StanceRating.objects.filter(
+            user=self, topic_id=topic_id, rating_type='pre').exists()
+
+    def has_completed_chat(self, topic_id):
+        """True if the user has at least one message in the conversation for this topic."""
+        return ConversationMessage.objects.filter(
+            user=self, conversation__topic=str(topic_id)).exists()
+
+    def has_completed_stance_post(self, topic_id):
+        """True if the post-conversation stance rating exists for this topic."""
+        return StanceRating.objects.filter(
+            user=self, topic_id=topic_id, rating_type='post').exists()
