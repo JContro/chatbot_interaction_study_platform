@@ -144,7 +144,7 @@ class ResolveUrlTests(TestCase):
         self.assertIn('5', url)
 
     def test_missing_url_falls_back_to_name(self):
-        # baseline_intro is not yet wired in urls.py — resolve_url should fall
-        # back to returning the url_name string rather than raising.
-        step = {"url_name": "baseline_intro"}
-        self.assertEqual(flow.resolve_url(step), 'baseline_intro')
+        # An unknown URL name (no matching path in urls.py) must fall back to
+        # returning the url_name string rather than raising.
+        step = {"url_name": "this_url_name_does_not_exist"}
+        self.assertEqual(flow.resolve_url(step), 'this_url_name_does_not_exist')
