@@ -1,14 +1,17 @@
 import json
 import logging
 import random
+import csv
+import io
 
 from django.shortcuts import render, redirect, get_object_or_404, reverse
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from django.db import models
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm, PasswordResetRequestForm, SetPasswordForm
 from .models import User, Conversation, ConversationMessage, MessageAnnotation, StanceRating, InstrumentResponse
@@ -18,7 +21,9 @@ from .topics_data import (
     CONVERSATION_TOPICS, get_topic_areas, get_topics_by_area,
     get_topic_by_id, get_all_stance_types
 )
-from .instruments_data import INSTRUMENT_ORDER, get_instrument, instrument_item_count
+from .instruments_data import (
+    INSTRUMENT_ORDER, get_instrument, instrument_item_count, score_instrument
+)
 from . import baseline_battery
 
 logger = logging.getLogger(__name__)
@@ -1572,3 +1577,251 @@ def baseline_failed_view(request):
     if gate is not None:
         return gate
     return render(request, "accounts/baseline_failed.html")
+
+
+# ---------------------------------------------------------------------------
+# Baseline admin views — researcher export surfaces
+# ---------------------------------------------------------------------------
+
+@login_required
+def admin_baseline_view(request):
+    """
+    Admin view to display baseline battery data per participant.
+    Staff only. Shows per-participant baseline status, duration, and computed scores.
+    Provides links to export scores and responses as CSV.
+    """
+    if not request.user.is_staff:
+        messages.error(
+            request, 'You do not have permission to access this page.')
+        return redirect('topic_selection')
+
+    # Gather participants who have touched the baseline (started or completed).
+    # Include anyone with baseline_status != 'pending' OR any InstrumentResponse.
+    users_with_responses = set(
+        InstrumentResponse.objects.values_list('user_id', flat=True).distinct()
+    )
+    baseline_users = User.objects.filter(
+        models.Q(baseline_status__in=['completed', 'attention_failed', 'abandoned'])
+        | models.Q(id__in=users_with_responses)
+    ).order_by('-baseline_started_at')
+
+    # Build participant data.
+    participants = []
+    for user in baseline_users:
+        # Compute duration in seconds.
+        duration_seconds = None
+        if user.baseline_started_at and user.baseline_completed_at:
+            delta = user.baseline_completed_at - user.baseline_started_at
+            duration_seconds = delta.total_seconds()
+
+        participant_data = {
+            'user_email': user.email,
+            'user_id': user.id,
+            'baseline_status': user.baseline_status,
+            'duration_seconds': duration_seconds,
+            'baseline_started_at': user.baseline_started_at.isoformat() if user.baseline_started_at else None,
+            'baseline_completed_at': user.baseline_completed_at.isoformat() if user.baseline_completed_at else None,
+            'baseline_failed_item_index': user.baseline_failed_item_index,
+            'baseline_failed_keystroke': user.baseline_failed_keystroke,
+        }
+
+        # Compute scores for each instrument.
+        for slug in INSTRUMENT_ORDER:
+            responses_qs = InstrumentResponse.objects.filter(
+                user=user, instrument_slug=slug
+            )
+            responses_dict = {r.item_index: r.value for r in responses_qs}
+
+            if responses_dict:
+                scores = score_instrument(responses_dict, slug)
+                # Merge scores into participant_data with slug prefix.
+                for score_key, score_value in scores.items():
+                    prefixed_key = f"{slug}__{score_key}"
+                    if score_value is not None:
+                        # Format floats to 1 decimal place for readability.
+                        if isinstance(score_value, float):
+                            participant_data[prefixed_key] = round(score_value, 1)
+                        else:
+                            participant_data[prefixed_key] = score_value
+                    else:
+                        participant_data[prefixed_key] = None
+
+        participants.append(participant_data)
+
+    export_scores_url = reverse('admin_baseline_export_scores')
+    export_responses_url = reverse('admin_baseline_export_responses')
+
+    return render(request, 'accounts/admin_baseline.html', {
+        'participants': participants,
+        'export_scores_url': export_scores_url,
+        'export_responses_url': export_responses_url,
+    })
+
+
+@login_required
+def admin_baseline_export_scores_view(request):
+    """
+    Export baseline scores as CSV (wide format, one row per participant).
+    Staff only. Returns a CSV with all participants and their computed scores.
+    """
+    if not request.user.is_staff:
+        messages.error(
+            request, 'You do not have permission to access this page.')
+        return redirect('topic_selection')
+
+    # Gather all users who have touched baseline or have responses.
+    from django.db import models as django_models
+    users_with_responses = set(
+        InstrumentResponse.objects.values_list('user_id', flat=True).distinct()
+    )
+    baseline_users = User.objects.filter(
+        django_models.Q(baseline_status__in=['completed', 'attention_failed', 'abandoned'])
+        | django_models.Q(id__in=users_with_responses)
+    ).order_by('-baseline_started_at')
+
+    # Build CSV output.
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Determine all possible score columns by scanning first participant.
+    all_score_keys = set()
+    for slug in INSTRUMENT_ORDER:
+        # Get a sample instrument to know what keys to expect.
+        instrument = get_instrument(slug)
+        if slug == 'bfi_2_s':
+            # Domains, facets, complete.
+            for domain_name in instrument['scoring']['domains'].keys():
+                all_score_keys.add(f"{slug}__{domain_name}")
+            for facet_name in instrument['scoring']['facets'].keys():
+                all_score_keys.add(f"{slug}__{facet_name}")
+            all_score_keys.add(f"{slug}__complete")
+        elif slug == 'idas_r':
+            # Subscales, total, complete.
+            for subscale_name in instrument['scoring']['subscales'].keys():
+                all_score_keys.add(f"{slug}__{subscale_name}")
+            all_score_keys.add(f"{slug}__total")
+            all_score_keys.add(f"{slug}__complete")
+
+    # Sort score keys for consistent column ordering.
+    sorted_score_keys = sorted(all_score_keys)
+
+    # Write header.
+    header = [
+        'user_email',
+        'user_id',
+        'baseline_status',
+        'baseline_started_at',
+        'baseline_completed_at',
+        'duration_seconds',
+        'baseline_failed_item_index',
+        'baseline_failed_keystroke',
+    ] + sorted_score_keys
+    writer.writerow(header)
+
+    # Write data rows.
+    for user in baseline_users:
+        duration_seconds = None
+        if user.baseline_started_at and user.baseline_completed_at:
+            delta = user.baseline_completed_at - user.baseline_started_at
+            duration_seconds = delta.total_seconds()
+
+        row_data = {
+            'user_email': user.email,
+            'user_id': user.id,
+            'baseline_status': user.baseline_status,
+            'baseline_started_at': user.baseline_started_at.isoformat() if user.baseline_started_at else '',
+            'baseline_completed_at': user.baseline_completed_at.isoformat() if user.baseline_completed_at else '',
+            'duration_seconds': duration_seconds if duration_seconds is not None else '',
+            'baseline_failed_item_index': user.baseline_failed_item_index if user.baseline_failed_item_index is not None else '',
+            'baseline_failed_keystroke': user.baseline_failed_keystroke,
+        }
+
+        # Compute scores for each instrument.
+        for slug in INSTRUMENT_ORDER:
+            responses_qs = InstrumentResponse.objects.filter(
+                user=user, instrument_slug=slug
+            )
+            responses_dict = {r.item_index: r.value for r in responses_qs}
+
+            if responses_dict:
+                scores = score_instrument(responses_dict, slug)
+                for score_key, score_value in scores.items():
+                    prefixed_key = f"{slug}__{score_key}"
+                    if score_value is not None:
+                        if isinstance(score_value, float):
+                            row_data[prefixed_key] = round(score_value, 1)
+                        else:
+                            row_data[prefixed_key] = score_value
+                    else:
+                        row_data[prefixed_key] = ''
+
+        # Build row in header order.
+        row = [
+            row_data['user_email'],
+            row_data['user_id'],
+            row_data['baseline_status'],
+            row_data['baseline_started_at'],
+            row_data['baseline_completed_at'],
+            row_data['duration_seconds'],
+            row_data['baseline_failed_item_index'],
+            row_data['baseline_failed_keystroke'],
+        ]
+        for key in sorted_score_keys:
+            row.append(row_data.get(key, ''))
+        writer.writerow(row)
+
+    # Return CSV response.
+    response = HttpResponse(output.getvalue(), content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="baseline_scores.csv"'
+    return response
+
+
+@login_required
+def admin_baseline_export_responses_view(request):
+    """
+    Export baseline responses as CSV (long format, one row per response).
+    Staff only. Returns a CSV with all InstrumentResponse rows including baseline_status.
+    """
+    if not request.user.is_staff:
+        messages.error(
+            request, 'You do not have permission to access this page.')
+        return redirect('topic_selection')
+
+    # Get all responses.
+    responses_qs = InstrumentResponse.objects.select_related('user').order_by(
+        'user_id', 'instrument_slug', 'item_index'
+    )
+
+    # Build CSV output.
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Write header.
+    header = [
+        'user_email',
+        'user_id',
+        'baseline_status',
+        'instrument_slug',
+        'item_index',
+        'value',
+        'updated_at',
+    ]
+    writer.writerow(header)
+
+    # Write data rows.
+    for response in responses_qs:
+        row = [
+            response.user.email,
+            response.user.id,
+            response.user.baseline_status,
+            response.instrument_slug,
+            response.item_index,
+            response.value,
+            response.updated_at.isoformat(),
+        ]
+        writer.writerow(row)
+
+    # Return CSV response.
+    response_obj = HttpResponse(output.getvalue(), content_type='text/csv')
+    response_obj['Content-Disposition'] = 'attachment; filename="baseline_responses.csv"'
+    return response_obj

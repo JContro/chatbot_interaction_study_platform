@@ -46,4 +46,11 @@ urlpatterns = [
          views.admin_analysis_view, name='admin_analysis'),
     path('study-admin/api/llm-suggest-analysis/<int:user_id>/<str:topic>/',
          views.llm_suggest_analysis_view, name='llm_suggest_analysis'),
+    # Baseline admin views
+    path('study-admin/baseline/', views.admin_baseline_view,
+         name='admin_baseline'),
+    path('study-admin/baseline/export/scores/', views.admin_baseline_export_scores_view,
+         name='admin_baseline_export_scores'),
+    path('study-admin/baseline/export/responses/', views.admin_baseline_export_responses_view,
+         name='admin_baseline_export_responses'),
 ]

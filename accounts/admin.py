@@ -3,6 +3,21 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User, InstrumentResponse
 
 
+@admin.action(description="Reset baseline attention_failed -> pending")
+def reset_baseline_attention_failed(modeladmin, request, queryset):
+    """
+    Admin action to reset users with attention_failed status back to pending.
+    Clears baseline_failed_item_index and baseline_failed_keystroke.
+    """
+    updated = queryset.filter(baseline_status='attention_failed').update(
+        baseline_status='pending',
+        baseline_failed_item_index=None,
+        baseline_failed_keystroke='',
+    )
+    admin.site.site_header  # Access admin to get site object for messages
+    # Django admin will show "X objects successfully changed" automatically
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     """
@@ -17,6 +32,7 @@ class UserAdmin(BaseUserAdmin):
                    'is_email_verified', 'is_superuser', 'baseline_status')
     search_fields = ('email',)
     ordering = ('-date_joined',)
+    actions = [reset_baseline_attention_failed]
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
