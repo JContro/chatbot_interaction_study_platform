@@ -31,14 +31,15 @@ SECRET_KEY = os.getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,.trycloudflare.com').split(',')
 
-# CSRF trusted origins for port forwarding setups (e.g., server->bastion->local)
+# CSRF trusted origins for port forwarding setups (e.g., server->bastion->local, cloudflare tunnels)
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:8000',
     'http://localhost:8080',
     'http://127.0.0.1:8080',
+    'https://*.trycloudflare.com',
 ] + [origin for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin]
 
 

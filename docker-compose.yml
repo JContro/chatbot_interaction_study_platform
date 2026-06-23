@@ -4,7 +4,7 @@ services:
     volumes:
       - .:/workspace
     ports:
-      - "8088:8086"
+      - "9000:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ipc: host
@@ -20,4 +20,4 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["sh", "-c", "python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:8086"]
+    command: ["sh", "-c", "python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:9000"]

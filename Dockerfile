@@ -28,9 +28,9 @@ COPY accounts accounts/
 COPY templates templates/
 COPY .env .
 
-# Expose port 8086
-EXPOSE 8086
+# Expose port 9000
+EXPOSE 9000
 
 # Required GPU runtime flags: --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864
 # Run migrations and start Django server with GPU support
-CMD ["sh", "-c", "python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:8086"]
+CMD ["sh", "-c", "python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:9000"]
